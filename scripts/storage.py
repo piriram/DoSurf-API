@@ -3,19 +3,22 @@ import datetime
 import math
 from .firebase_utils import db
 
+ALLOWED_HOURS = {2, 5, 8, 11, 14, 17, 20, 23}  # 발표시각
+
 def save_forecasts_merged(region, beach, picked, marine):
     """
-    KMA와 Open-Meteo 데이터를 시간 단위로 합쳐 Firestore에 batch 저장
-    :param region: 지역명
-    :param beach: 해변명
-    :param picked: KMA 예보 리스트 [{datetime, category, value}, ...]
-    :param marine: Open-Meteo 예보 리스트 [{datetime, om_wave_height, om_wave_direction, sea_surface_temperature}, ...]
+    발표시각(02,05,08,11,14,17,20,23) 시간대만 저장.
+    Open-Meteo는 KMA가 있는 시간대에만 병합.
     """
     time_groups = {}
 
-    # 1) KMA 데이터 병합
+    # 1) KMA 병합 (발표시각만 허용)
     for chart in picked:
         dt_str = chart["datetime"]
+        dt_obj = datetime.datetime.fromisoformat(dt_str)
+        if dt_obj.minute != 0 or dt_obj.hour not in ALLOWED_HOURS:
+            continue
+
         if dt_str not in time_groups:
             time_groups[dt_str] = {"region": region, "beach": beach, "datetime": dt_str}
 
@@ -66,22 +69,17 @@ def save_forecasts_merged(region, beach, picked, marine):
             print(f"   ⚠ 값 변환 실패: {category}={raw_value} -> {e}")
             continue
 
-    # 2) Open-Meteo 데이터 병합
-    kma_datetimes = set(time_groups.keys())   # KMA에서 수집된 시간대만 기준
-
+    # 2) Open-Meteo 병합 (KMA 시각 집합만 허용)
+    kma_datetimes = set(time_groups.keys())
     for r in marine:
         dt_str = r["datetime"]
         if dt_str not in kma_datetimes:
-            continue  # KMA에 없는 시간대는 버린다 ✅
-
-        if dt_str not in time_groups:
-            time_groups[dt_str] = {"region": region, "beach": beach, "datetime": dt_str}
-
+            continue
         time_groups[dt_str]["om_wave_height"] = r.get("om_wave_height")
         time_groups[dt_str]["om_wave_direction"] = r.get("om_wave_direction")
         time_groups[dt_str]["sea_surface_temperature"] = r.get("sea_surface_temperature")
 
-    # 3) Firestore 배치 저장
+    # 3) Firestore 배치 저장 (merge=True로 기존 필드 보존)
     batch = db.batch()
     saved_count = 0
 
@@ -100,19 +98,18 @@ def save_forecasts_merged(region, beach, picked, marine):
                      .document(doc_id))
 
             data["timestamp"] = dt
-            batch.set(ref, data, merge=True)
+            batch.set(ref, data, merge=True)  # ★ 중요: 기존 필드 보존
             saved_count += 1
         except Exception as e:
             print(f"   ⚠ 저장 실패 {dt_str}: {e}")
 
     if saved_count > 0:
         batch.commit()
-        print(f"   ✅ {saved_count}개 시간대 데이터 병합 저장 완료")
+        print(f"   ✅ {saved_count}개 시간대(발표시각) 병합 저장 완료")
     else:
         print("   ⚠ 저장할 데이터 없음")
 
-
-# 조회 유틸 (있으면 그대로 두세요)
+# 조회 유틸은 동일
 def get_beach_forecast(region, beach, hours=24):
     now = datetime.datetime.now()
     start_time = now.replace(minute=0, second=0, microsecond=0)
