@@ -8,7 +8,7 @@ db = firestore.Client()
 @app.route("/", methods=["POST"])
 def log_update_time():
     now = datetime.datetime.now()
-    doc_id = now.strftime("%Y%m%d%H%M%S")
+    doc_id = now.strftime("%Y%m%d%H%M")
     ref = db.collection("meta_updates").document(doc_id)
     ref.set({
         "timestamp": now,
