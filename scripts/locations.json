@@ -1,7 +1,30 @@
 [
-  {"region":"포항/울산", "beach":"wolpo", "lat":36.0014, "lon":129.2523},
-  {"region":"제주", "beach":"jungmun", "lat":33.4996, "lon":126.5312},
-  {"region":"강릉", "beach":"jeongdongjin", "lat":37.7714, "lon":129.1234},
-  {"region":"부산", "beach":"songjeong", "lat":35.1796, "lon":129.1635}
-  
+  {
+    "beach_id": 2001,
+    "region": "pohang", 
+    "beach": "wolpo", 
+    "lat": 36.0014, 
+    "lon": 129.2523
+  },
+  {
+    "beach_id": 3001,
+    "region": "jeju", 
+    "beach": "jungmun", 
+    "lat": 33.4996, 
+    "lon": 126.5312
+  },
+  {
+    "beach_id": 1001,
+    "region": "gangreung", 
+    "beach": "jeongdongjin", 
+    "lat": 37.7714, 
+    "lon": 129.1234
+  },
+  {
+    "beach_id": 4001,
+    "region": "busan", 
+    "beach": "songjeong", 
+    "lat": 35.1796, 
+    "lon": 129.1635
+  }
 ]

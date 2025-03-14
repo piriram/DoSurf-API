@@ -1,3 +1,4 @@
+# firestore_service.py
 import os, json, datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -61,7 +62,7 @@ def init_firebase():
 def save_weather_to_firestore(region, beach, forecast_data):
     """
     기상 예보 데이터를 Firestore에 저장
-    구조: regions/{region}/beaches/{beach}/forecasts/{YYYYMMDDHHMM}
+    구조: regions/{region}/{beach}/{YYYYMMDDHHMM}
     """
     db = init_firebase()
     time_groups = {}  # 시간별 데이터 묶음
@@ -127,11 +128,10 @@ def save_weather_to_firestore(region, beach, forecast_data):
             clean_region = region.replace("/", "_").replace(" ", "_")
             clean_beach = beach.replace("/", "_").replace(" ", "_")
 
+            # 변경된 구조: regions/{region}/{beach}/{forecastId}
             ref = (db.collection("regions")
                      .document(clean_region)
-                     .collection("beaches")
-                     .document(clean_beach)
-                     .collection("forecasts")
+                     .collection(clean_beach)
                      .document(doc_id))
 
             data["timestamp"] = dt
@@ -157,11 +157,10 @@ def get_beach_forecast(region, beach, hours=24):
     clean_region = region.replace("/", "_").replace(" ", "_")
     clean_beach = beach.replace("/", "_").replace(" ", "_")
 
+    # 변경된 구조: regions/{region}/{beach}
     ref = (db.collection("regions")
              .document(clean_region)
-             .collection("beaches")
-             .document(clean_beach)
-             .collection("forecasts")
+             .collection(clean_beach)
              .where("timestamp", ">=", start_time)
              .where("timestamp", "<=", end_time)
              .order_by("timestamp"))
@@ -178,7 +177,13 @@ def get_all_beaches_in_region(region):
     db = init_firebase()
     clean_region = region.replace("/", "_").replace(" ", "_")
 
-    ref = db.collection("regions").document(clean_region).collection("beaches")
+    # 변경된 구조에서는 regions/{region} 아래의 모든 컬렉션이 해변임
+    # Firestore에서 컬렉션 목록을 직접 조회하는 것은 제한적이므로
+    # 별도의 beaches 메타데이터 문서를 관리하거나 다른 방법 필요
+    
+    # 임시 해결책: 알려진 해변들을 하드코딩하거나 별도 관리
+    # 또는 regions/{region}/beaches_metadata 문서에 해변 목록 저장
+    ref = db.collection("regions").document(clean_region).collection("beaches_metadata")
     docs = ref.stream()
     return [doc.id for doc in docs]
 
@@ -194,11 +199,10 @@ def get_current_conditions(region, beach):
     clean_region = region.replace("/", "_").replace(" ", "_")
     clean_beach = beach.replace("/", "_").replace(" ", "_")
 
+    # 변경된 구조: regions/{region}/{beach}
     ref = (db.collection("regions")
              .document(clean_region)
-             .collection("beaches")
-             .document(clean_beach)
-             .collection("forecasts")
+             .collection(clean_beach)
              .where("timestamp", ">=", now)
              .order_by("timestamp")
              .limit(1))
