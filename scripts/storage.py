@@ -96,16 +96,29 @@ def save_forecasts_merged(region, beach, beach_id, picked, marine):
             print(f"   ⚠ 값 변환 실패: {category}={raw_value} -> {e}")
             continue
 
-    # -------------------------
-    # 2) Open-Meteo 데이터 병합
-    # -------------------------
-    kma_datetimes = set(time_groups.keys())  # 기상청 발표 시각 집합
+
+   # -------------------------
+# 2) Open-Meteo 데이터 병합 (개선!)
+# -------------------------
     for r in marine:  # marine: Open-Meteo 결과 리스트
         dt_str = r["om_datetime"]
-        if dt_str not in kma_datetimes:  # KMA에 없는 시간대는 무시
+        dt_obj = datetime.datetime.fromisoformat(dt_str)
+        
+        # ALLOWED_HOURS 확인
+        if dt_obj.minute != 0 or dt_obj.hour not in ALLOWED_HOURS:
             continue
-        # 같은 시간대라면 Open-Meteo 데이터 추가
-        time_groups[dt_str]["om_wave_height"] = r.get("om_wave_height") + 0.5
+        
+        # KMA 데이터가 있으면 병합, 없으면 새로 생성
+        if dt_str not in time_groups:
+            time_groups[dt_str] = {
+                "beach_id": beach_id,
+                "region": region,
+                "beach": beach,
+                "datetime": dt_str
+            }
+        
+        # Open-Meteo 데이터 추가
+        time_groups[dt_str]["om_wave_height"] = r.get("om_wave_height", 0) + 0.5
         time_groups[dt_str]["om_wave_direction"] = r.get("om_wave_direction")
         time_groups[dt_str]["om_sea_surface_temperature"] = r.get("om_sea_surface_temperature")
 
@@ -290,7 +303,7 @@ def get_current_conditions_by_id(region, beach_id):
 def update_region_beach_ids_list(region, beach_data_list):
     """
     특정 지역의 해변 ID 목록을 메타데이터로 저장
-    beach_data_list: [{"beach_id": 1001, "beach": "jukdo"}, ...]
+    beach_data_list: [{"beach_id": 1001, "beach": "jukdo", "display_name": "죽도"}, ...]
     """
     try:
         clean_region = region.replace("/", "_").replace(" ", "_")
@@ -299,25 +312,24 @@ def update_region_beach_ids_list(region, beach_data_list):
                  .collection("_region_metadata")
                  .document("beaches"))
         
-        # Beach ID와 이름을 모두 저장
         beach_ids = [item["beach_id"] for item in beach_data_list]
         beach_names = [item["beach"] for item in beach_data_list]
         beach_mapping = {str(item["beach_id"]): item["beach"] for item in beach_data_list}
+        display_name_mapping = {str(item["beach_id"]): item.get("display_name", item["beach"]) for item in beach_data_list}
         
-        # 한국 시간으로 업데이트 시간 설정
         kst_now = get_kst_now()
         
         ref.set({
-            "beach_ids": beach_ids,           # Beach ID 리스트
-            "beach_names": beach_names,       # Beach 이름 리스트
-            "beach_mapping": beach_mapping,   # ID -> 이름 매핑
-            "updated_at": kst_now,            # 한국 시간 사용
+            "beach_ids": beach_ids,
+            "beach_names": beach_names,
+            "beach_mapping": beach_mapping,
+            "display_name_mapping": display_name_mapping,  # 추가
+            "updated_at": kst_now,
             "total_beaches": len(beach_data_list)
         })
         print(f"✅ {region} 지역 해변 ID 목록 업데이트: {beach_ids} at {kst_now.strftime('%Y-%m-%d %H:%M:%S KST')}")
     except Exception as e:
         print(f"⚠ 지역 해변 ID 목록 업데이트 실패: {e}")
-
 
 def get_all_beach_ids_in_region(region):
     """
