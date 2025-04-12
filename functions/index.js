@@ -1,8 +1,7 @@
 // functions/index.js
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const { PythonShell } = require("python-shell");
-const path = require("path");
+const { execSync } = require("child_process");
 
 admin.initializeApp();
 
@@ -26,23 +25,21 @@ exports.scheduledForecastCollect = functions
   .onRun(async (context) => {
     console.log("🌊 예보 수집 시작:", new Date().toISOString());
     
-    const scriptPath = path.join(__dirname, "main.py");
-    
-    const options = {
-      mode: "text",
-      pythonPath: "python3",
-      pythonOptions: ["-u"],
-      scriptPath: __dirname,
-      args: []
-    };
-
     try {
-      const results = await PythonShell.run("main.py", options);
-      console.log("✅ 예보 수집 완료:", results);
+      const result = execSync("python3 main.py", {
+        cwd: __dirname,
+        encoding: "utf-8",
+        stdio: "pipe",
+        maxBuffer: 10 * 1024 * 1024  // 10MB buffer
+      });
+      
+      console.log("✅ 예보 수집 완료:", result);
       return null;
     } catch (error) {
-      console.error("❌ 예보 수집 실패:", error);
-      throw new functions.https.HttpsError("internal", "예보 수집 중 오류 발생", error);
+      console.error("❌ 예보 수집 실패:", error.message);
+      if (error.stdout) console.log("stdout:", error.stdout);
+      if (error.stderr) console.error("stderr:", error.stderr);
+      throw new functions.https.HttpsError("internal", "예보 수집 중 오류 발생");
     }
   });
 
@@ -62,30 +59,28 @@ exports.collectForecast = functions
   .onRequest(async (req, res) => {
     console.log("🌊 수동 예보 수집 시작:", new Date().toISOString());
     
-    const scriptPath = path.join(__dirname, "main.py");
-    
-    const options = {
-      mode: "text",
-      pythonPath: "python3",
-      pythonOptions: ["-u"],
-      scriptPath: __dirname,
-      args: []
-    };
-
     try {
-      const results = await PythonShell.run("main.py", options);
-      console.log("✅ 수동 예보 수집 완료:", results);
+      const result = execSync("python3 main.py", {
+        cwd: __dirname,
+        encoding: "utf-8",
+        stdio: "pipe",
+        maxBuffer: 10 * 1024 * 1024
+      });
+      
+      console.log("✅ 수동 예보 수집 완료:", result);
       res.status(200).json({
         success: true,
         message: "예보 수집 완료",
-        results: results
+        output: result
       });
     } catch (error) {
-      console.error("❌ 수동 예보 수집 실패:", error);
+      console.error("❌ 수동 예보 수집 실패:", error.message);
       res.status(500).json({
         success: false,
         message: "예보 수집 실패",
-        error: error.toString()
+        error: error.message,
+        stdout: error.stdout,
+        stderr: error.stderr
       });
     }
   });

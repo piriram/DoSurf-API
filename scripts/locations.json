@@ -10,6 +10,36 @@
     "lon": 129.1234
   },
   {
+    "beach_id": 1002,
+    "region": "gangreung",
+    "region_name": "강릉",
+    "region_order": 1,
+    "beach": "sacheonjin",
+    "display_name": "사천진",
+    "lat": 37.8241,
+    "lon": 128.9092
+  },
+  {
+    "beach_id": 1003,
+    "region": "gangreung",
+    "region_name": "강릉",
+    "region_order": 1,
+    "beach": "sageunjin",
+    "display_name": "사근진",
+    "lat": 37.7973,
+    "lon": 128.9184
+  },
+   {
+    "beach_id": 1004,
+    "region": "gangreung",
+    "region_name": "강릉",
+    "region_order": 1,
+    "beach": "sacheon",
+    "display_name": "사천",
+    "lat": 37.8292,
+    "lon": 128.9037
+  },
+  {
     "beach_id": 2001,
     "region": "pohang",
     "region_name": "포항",
@@ -18,6 +48,16 @@
     "display_name": "월포",
     "lat": 36.0014,
     "lon": 129.2523
+  },
+   {
+    "beach_id": 2002,
+    "region": "pohang",
+    "region_name": "포항",
+    "region_order": 2,
+    "beach": "sinhangman",
+    "display_name": "신항만",
+    "lat": 35.9819,
+    "lon": 129.4227
   },
   {
     "beach_id": 3001,
