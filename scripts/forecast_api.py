@@ -16,7 +16,7 @@ except ImportError:
     print("⚠ config.py를 찾을 수 없습니다. 기본 재시도 설정을 사용합니다.")
 
 # -------- API & 설정 --------
-VILAGE_URL = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
+VILAGE_URL = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0/getVilageFcst"
 BASE_TIMES = [23, 20, 17, 14, 11, 8, 5, 2]
 ROOT_DIR = os.path.dirname(os.path.abspath(os.path.join(__file__, os.pardir)))
 SECRETS_PATH = os.path.join(ROOT_DIR, "secrets", "secrets.json")
@@ -56,9 +56,10 @@ def _load_api_key():
     with open(SECRETS_PATH, "r", encoding="utf-8") as f:
         secrets = json.load(f)
     raw = secrets["API_KEY"]
-    return unquote(raw)
+    # API Hub는 URL 인코딩 불필요 (unquote 제거)
+    return raw
 
-SERVICE_KEY = _load_api_key()
+AUTH_KEY = _load_api_key()
 
 
 def latlon_to_xy(lat, lon):
@@ -138,9 +139,9 @@ def get_error_description(result_code):
 
 
 def request_vilage(base_date, base_time, nx, ny):
-    """기상청 단기예보 API 요청"""
+    """기상청 단기예보 API 요청 (API Hub)"""
     params = {
-        "serviceKey": SERVICE_KEY,
+        "authKey": AUTH_KEY,  # serviceKey → authKey 변경
         "numOfRows": 1000,
         "pageNo": 1,
         "dataType": "JSON",
@@ -226,9 +227,9 @@ def fetch_items_with_fallback(nx, ny, max_rollback=None, sleep_sec=None):
             print(f"   🚫 FATAL ERROR [{code}]: {error_desc}")
             print(f"   ⚠️ 설정 문제로 재시도 불가능. 즉시 중단합니다.")
             if code in ["30", "31"]:
-                print(f"   💡 secrets.json의 API_KEY를 확인하세요.")
+                print(f"   💡 secrets.json의 API_KEY (authKey)를 확인하세요.")
             elif code == "32":
-                print(f"   💡 공공데이터포털에서 IP 등록을 확인하세요.")
+                print(f"   💡 기상청 API Hub에서 IP 등록을 확인하세요.")
             return None, None, None
 
         # ===== 재시도 가능한 에러 =====
