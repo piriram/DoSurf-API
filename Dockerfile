@@ -1,15 +1,16 @@
-# Dockerfile
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# 패키지 설치
+# 의존성 설치
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 코드 복사
 COPY . .
 
-# main.py가 진입점 (3시간마다 실행)
-CMD ["python", "main.py"]
+# 환경변수
+ENV PORT=8080
+
+# Flask 서버 실행
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 server:app
