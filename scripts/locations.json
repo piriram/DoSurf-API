@@ -70,6 +70,26 @@
     "lon": 126.5312
   },
   {
+    "beach_id": 3002,
+    "region": "jeju",
+    "region_name": "제주",
+    "region_order": 3,
+    "beach": "ihoteu",
+    "display_name": "이호테우",
+    "lat": 33.4975,
+    "lon": 126.4525
+  },
+  {
+    "beach_id": 3003,
+    "region": "jeju",
+    "region_name": "제주",
+    "region_order": 3,
+    "beach": "woljeong",
+    "display_name": "월정",
+    "lat": 33.5564,
+    "lon": 126.7953
+  },
+  {
     "beach_id": 4001,
     "region": "busan",
     "region_name": "부산",
