@@ -1,13 +1,13 @@
 [
   {
-    "beach_id": 1001,
-    "region": "gangreung",
-    "region_name": "강릉",
-    "region_order": 1,
-    "beach": "jeongdongjin",
-    "display_name": "정동진",
-    "lat": 37.7714,
-    "lon": 129.1234
+  "beach_id": 1001,
+  "region": "gangreung",
+  "region_name": "강릉",
+  "region_order": 1,
+  "beach": "jukdo",
+  "display_name": "죽도",
+  "lat": 37.9723,
+  "lon": 128.7595
   },
   {
     "beach_id": 1002,
