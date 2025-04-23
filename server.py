@@ -1,10 +1,12 @@
+# server.py
 from flask import Flask, jsonify
 import datetime
-import os, json
+import os
 
 from scripts.forecast_api import fetch_items_with_fallback, latlon_to_xy
 from scripts.open_meteo import fetch_marine
-from scripts.storage import save_forecasts_merged, update_region_beach_ids_list
+from scripts.storage import save_forecasts_merged
+from scripts.beach_registry import load_locations, update_all_metadata
 
 app = Flask(__name__)
 
@@ -17,41 +19,14 @@ except ImportError:
     ISSUE_HOURS = {0, 3, 6, 9, 12, 15, 18, 21}
     FORECAST_DAYS = 3
 
-def load_locations():
-    base_dir = os.path.dirname(__file__)
-    path = os.path.join(base_dir, "scripts", "locations.json")
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def update_region_metadata(locations):
-    region_beaches = {}
-    for loc in locations:
-        region = loc["region"]
-        beach_id = loc["beach_id"]
-        beach = loc["beach"]
-        display_name = loc.get("display_name", beach)
-        
-        if region not in region_beaches:
-            region_beaches[region] = []
-        
-        existing_ids = [item["beach_id"] for item in region_beaches[region]]
-        if beach_id not in existing_ids:
-            region_beaches[region].append({
-                "beach_id": beach_id,
-                "beach": beach,
-                "display_name": display_name
-            })
-    
-    for region, beach_data in region_beaches.items():
-        update_region_beach_ids_list(region, beach_data)
 
 def run_collection():
+    """메인 수집 로직"""
     locations = load_locations()
     end_dt = datetime.datetime.now() + datetime.timedelta(days=FORECAST_DAYS)
 
-    print("🗂️  지역별 해변 ID 메타데이터 업데이트 중...")
-    update_region_metadata(locations)
-    print("✅ 메타데이터 업데이트 완료\n")
+    # 전체 해변 목록 + 지역별 해변 목록 메타데이터 업데이트
+    update_all_metadata(locations)
 
     successful_updates = 0
     partial_updates = 0
@@ -120,8 +95,10 @@ def run_collection():
         "failed": failed_updates
     }
 
+
 @app.route('/', methods=['GET', 'POST'])
 def collect():
+    """수집 엔드포인트"""
     print("🌊 예보 수집 시작:", datetime.datetime.now().isoformat())
     
     try:
@@ -140,9 +117,12 @@ def collect():
             "error": str(e)
         }), 500
 
+
 @app.route('/health', methods=['GET'])
 def health():
+    """헬스체크 엔드포인트"""
     return jsonify({"status": "healthy"}), 200
+
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8080))

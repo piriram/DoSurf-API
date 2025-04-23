@@ -3,6 +3,7 @@ import datetime
 import math
 from zoneinfo import ZoneInfo  # Python 3.9+에서 사용 가능
 from .firebase_utils import db  # Firestore 클라이언트
+from .beach_registry import get_all_beach_ids_in_region  # 해변 레지스트리
 
 # 3시간 간격 저장 시간 (0, 3, 6, 9, 12, 15, 18, 21시)
 ALLOWED_HOURS = {0, 3, 6, 9, 12, 15, 18, 21}
@@ -233,7 +234,114 @@ def update_beach_metadata(region, beach, beach_id, forecast_count, earliest_time
 
 
 # -------------------------
-# 조회 유틸 함수들 (Beach ID 기반) - 시간대 수정
+# 전역 해변 목록 관리
+# -------------------------
+
+def update_global_beaches_list(all_beaches):
+    """
+    전체 해변 목록을 최상위 메타데이터로 저장
+    all_beaches: BEACH_REGISTRY 전체 데이터
+    
+    iOS 클라이언트는 이 문서 하나만 조회하면 모든 해변 정보를 얻을 수 있습니다.
+    """
+    try:
+        ref = (db.collection("_global_metadata")
+                 .document("all_beaches"))
+        
+        kst_now = get_kst_now()
+        
+        # iOS에서 필요한 필드만 추출하여 간결하게 구성
+        beaches_for_client = []
+        for beach in all_beaches:
+            beaches_for_client.append({
+                "id": str(beach["beach_id"]),
+                "region": beach["region"],
+                "region_name": beach["region_name"],
+                "region_order": beach["region_order"],
+                "place": beach["display_name"],
+                "lat": beach["lat"],
+                "lon": beach["lon"]
+            })
+        
+        # region_order 순으로 정렬
+        beaches_for_client.sort(key=lambda x: (x["region_order"], x["id"]))
+        
+        ref.set({
+            "beaches": beaches_for_client,
+            "total_beaches": len(beaches_for_client),
+            "updated_at": kst_now
+        })
+        
+        print(f"✅ 전역 해변 목록 업데이트: {len(beaches_for_client)}개 at {kst_now.strftime('%Y-%m-%d %H:%M:%S KST')}")
+    except Exception as e:
+        print(f"⚠ 전역 해변 목록 업데이트 실패: {e}")
+
+
+# -------------------------
+# 지역별 해변 ID 목록 관리 (호환성 유지)
+# -------------------------
+
+def update_region_beach_ids_list(region, beach_data_list):
+    """
+    특정 지역의 해변 ID 목록을 메타데이터로 저장
+    beach_data_list: [{"beach_id": 1001, "beach": "jukdo", "display_name": "죽도"}, ...]
+    
+    주의: 이 함수는 호환성을 위해 유지되지만, 
+    새로운 앱 버전에서는 update_global_beaches_list()를 사용하는 것을 권장합니다.
+    """
+    try:
+        clean_region = region.replace("/", "_").replace(" ", "_")
+        ref = (db.collection("regions")
+                 .document(clean_region)
+                 .collection("_region_metadata")
+                 .document("beaches"))
+        
+        beach_ids = [item["beach_id"] for item in beach_data_list]
+        beach_names = [item["beach"] for item in beach_data_list]
+        beach_mapping = {str(item["beach_id"]): item["beach"] for item in beach_data_list}
+        display_name_mapping = {str(item["beach_id"]): item.get("display_name", item["beach"]) for item in beach_data_list}
+        
+        kst_now = get_kst_now()
+        
+        ref.set({
+            "beach_ids": beach_ids,
+            "beach_names": beach_names,
+            "beach_mapping": beach_mapping,
+            "display_name_mapping": display_name_mapping,
+            "updated_at": kst_now,
+            "total_beaches": len(beach_data_list)
+        })
+        print(f"✅ {region} 지역 해변 ID 목록 업데이트: {beach_ids} at {kst_now.strftime('%Y-%m-%d %H:%M:%S KST')}")
+    except Exception as e:
+        print(f"⚠ 지역 해변 ID 목록 업데이트 실패: {e}")
+
+def get_all_beach_ids_in_region(region):
+    """
+    특정 지역의 모든 해변 ID 목록 조회
+    """
+    try:
+        clean_region = region.replace("/", "_").replace(" ", "_")
+        beaches_ref = (db.collection("regions")
+                        .document(clean_region)
+                        .collection("_region_metadata")
+                        .document("beaches"))
+        doc = beaches_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            return {
+                "beach_ids": data.get("beach_ids", []),
+                "beach_mapping": data.get("beach_mapping", {}),
+                "total_beaches": data.get("total_beaches", 0)
+            }
+    except Exception as e:
+        print(f"해변 ID 목록 조회 실패: {e}")
+    
+    # 기본값 반환
+    return {"beach_ids": [], "beach_mapping": {}, "total_beaches": 0}
+
+
+# -------------------------
+# 조회 유틸 함수들 (Beach ID 기반)
 # -------------------------
 
 def get_beach_forecast_by_id(region, beach_id, hours=24):
@@ -297,67 +405,7 @@ def get_current_conditions_by_id(region, beach_id):
 
 
 # -------------------------
-# 지역별 해변 ID 목록 관리 - 시간대 수정
-# -------------------------
-
-def update_region_beach_ids_list(region, beach_data_list):
-    """
-    특정 지역의 해변 ID 목록을 메타데이터로 저장
-    beach_data_list: [{"beach_id": 1001, "beach": "jukdo", "display_name": "죽도"}, ...]
-    """
-    try:
-        clean_region = region.replace("/", "_").replace(" ", "_")
-        ref = (db.collection("regions")
-                 .document(clean_region)
-                 .collection("_region_metadata")
-                 .document("beaches"))
-        
-        beach_ids = [item["beach_id"] for item in beach_data_list]
-        beach_names = [item["beach"] for item in beach_data_list]
-        beach_mapping = {str(item["beach_id"]): item["beach"] for item in beach_data_list}
-        display_name_mapping = {str(item["beach_id"]): item.get("display_name", item["beach"]) for item in beach_data_list}
-        
-        kst_now = get_kst_now()
-        
-        ref.set({
-            "beach_ids": beach_ids,
-            "beach_names": beach_names,
-            "beach_mapping": beach_mapping,
-            "display_name_mapping": display_name_mapping,  # 추가
-            "updated_at": kst_now,
-            "total_beaches": len(beach_data_list)
-        })
-        print(f"✅ {region} 지역 해변 ID 목록 업데이트: {beach_ids} at {kst_now.strftime('%Y-%m-%d %H:%M:%S KST')}")
-    except Exception as e:
-        print(f"⚠ 지역 해변 ID 목록 업데이트 실패: {e}")
-
-def get_all_beach_ids_in_region(region):
-    """
-    특정 지역의 모든 해변 ID 목록 조회
-    """
-    try:
-        clean_region = region.replace("/", "_").replace(" ", "_")
-        beaches_ref = (db.collection("regions")
-                        .document(clean_region)
-                        .collection("_region_metadata")
-                        .document("beaches"))
-        doc = beaches_ref.get()
-        if doc.exists:
-            data = doc.to_dict()
-            return {
-                "beach_ids": data.get("beach_ids", []),
-                "beach_mapping": data.get("beach_mapping", {}),
-                "total_beaches": data.get("total_beaches", 0)
-            }
-    except Exception as e:
-        print(f"해변 ID 목록 조회 실패: {e}")
-    
-    # 기본값 반환
-    return {"beach_ids": [], "beach_mapping": {}, "total_beaches": 0}
-
-
-# -------------------------
-# 기존 함수들 (호환성 유지) - 시간대 수정
+# 기존 함수들 (호환성 유지)
 # -------------------------
 
 def get_beach_forecast(region, beach, hours=24):
