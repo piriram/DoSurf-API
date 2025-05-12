@@ -4,6 +4,7 @@ import math
 from zoneinfo import ZoneInfo  # Python 3.9+에서 사용 가능
 from .firebase_utils import db  # Firestore 클라이언트
 from .beach_registry import get_all_beach_ids_in_region  # 해변 레지스트리
+from . import cache_utils  # 캐싱 레이어
 
 # 3시간 간격 저장 시간 (0, 3, 6, 9, 12, 15, 18, 21시)
 ALLOWED_HOURS = {0, 3, 6, 9, 12, 15, 18, 21}
@@ -168,13 +169,45 @@ def save_forecasts_merged(region, beach, beach_id, picked, marine):
             print(f"   ⚠ 저장 실패 {dt_str}: {e}")
 
     if saved_count > 0:
-        batch.commit()  # 배치 작업 실행
-        print(f"   ✅ {saved_count}개 시간대(발표시각) 병합 저장 완료")
-        
         # -------------------------
-        # 4) 해변별 메타데이터 업데이트
+        # 4) 메타데이터를 같은 배치에 추가 (배치 쓰기 통합)
         # -------------------------
-        update_beach_metadata(region, beach, beach_id, saved_count, earliest_forecast_time, latest_forecast_time)
+        clean_region = region.replace("/", "_").replace(" ", "_")
+        beach_id_str = str(beach_id)
+        kst_now = get_kst_now()
+
+        metadata_ref = (db.collection("regions")
+                         .document(clean_region)
+                         .collection(beach_id_str)
+                         .document("_metadata"))
+
+        metadata = {
+            "beach_id": beach_id,
+            "region": region,
+            "beach": beach,
+            "last_updated": kst_now,
+            "total_forecasts": saved_count,
+            "status": "active"
+        }
+
+        if earliest_forecast_time:
+            metadata["earliest_forecast"] = earliest_forecast_time
+        if latest_forecast_time:
+            metadata["latest_forecast"] = latest_forecast_time
+
+        # 메타데이터도 배치에 추가
+        batch.set(metadata_ref, metadata)
+
+        # 배치 커밋 (예보 + 메타데이터 한 번에 저장)
+        batch.commit()
+        print(f"   ✅ {saved_count}개 시간대(발표시각) + 메타데이터 배치 저장 완료")
+        print(f"   📊 메타데이터 업데이트: {region}-{beach}({beach_id}) at {kst_now.strftime('%Y-%m-%d %H:%M:%S KST')}")
+
+        # 캐시 무효화 (새 데이터가 저장되었으므로)
+        cache_utils.invalidate_pattern(f"forecast:{region}:{beach_id}")
+        cache_utils.invalidate_pattern(f"current:{region}:{beach_id}")
+        cache_utils.invalidate_pattern(f"metadata:{region}:{beach_id}")
+        print(f"   🔄 캐시 무효화 완료: {region}-{beach}({beach_id})")
     else:
         print("   ⚠ 저장할 데이터 없음")
 
@@ -213,19 +246,9 @@ def update_beach_metadata(region, beach, beach_id, forecast_count, earliest_time
         if latest_time:
             metadata["latest_forecast"] = latest_time
             
-        # 다음 예보 시간 (현재 한국 시간 이후 가장 가까운 예보)
-        next_forecast_ref = (db.collection("regions")
-                              .document(clean_region)
-                              .collection(beach_id_str)
-                              .where("timestamp", ">=", kst_now)
-                              .order_by("timestamp")
-                              .limit(1))
-        
-        next_docs = list(next_forecast_ref.stream())
-        if next_docs:
-            next_forecast_data = next_docs[0].to_dict()
-            metadata["next_forecast_time"] = next_forecast_data.get("timestamp")
-        
+        # 다음 예보 시간은 클라이언트가 계산하도록 함 (쿼리 비용 절감)
+        # next_forecast_time 필드 제거 - 불필요한 post-write 쿼리 제거
+
         metadata_ref.set(metadata)
         print(f"   📊 메타데이터 업데이트: {region}-{beach}({beach_id}) at {kst_now.strftime('%Y-%m-%d %H:%M:%S KST')}")
         
@@ -347,7 +370,15 @@ def get_all_beach_ids_in_region(region):
 def get_beach_forecast_by_id(region, beach_id, hours=24):
     """
     Beach ID를 사용해 특정 해변의 앞으로 hours시간 동안 예보 조회
+    안전 제한: 최대 100개 문서
+    캐싱: 15분 (예보 데이터는 정기적으로 업데이트)
     """
+    # 캐시 확인
+    cached_data = cache_utils.get("forecast", region, beach_id, hours)
+    if cached_data:
+        return cached_data
+
+    # 캐시 미스 - Firestore에서 조회
     kst_now = get_kst_now()
     start_time = kst_now.replace(minute=0, second=0, microsecond=0)
     end_time = start_time + datetime.timedelta(hours=hours)
@@ -356,30 +387,50 @@ def get_beach_forecast_by_id(region, beach_id, hours=24):
     beach_id_str = str(beach_id)
 
     # Beach ID 기반 구조: regions/{region}/{beach_id}
+    # 안전 제한 추가: .limit(100)
     ref = (db.collection("regions").document(clean_region)
              .collection(beach_id_str)
              .where("timestamp", ">=", start_time)
              .where("timestamp", "<=", end_time)
-             .order_by("timestamp"))
+             .order_by("timestamp")
+             .limit(100))
 
-    return [doc.to_dict() for doc in ref.stream()]
+    result = [doc.to_dict() for doc in ref.stream()]
+
+    # 캐시 저장
+    cache_utils.set("forecast", region, beach_id, hours, data=result)
+
+    return result
 
 
 def get_beach_metadata_by_id(region, beach_id):
     """
     Beach ID를 사용해 특정 해변의 메타데이터 조회
+    캐싱: 1시간 (메타데이터는 거의 변경되지 않음)
     """
+    # 캐시 확인
+    cached_data = cache_utils.get("metadata", region, beach_id)
+    if cached_data:
+        return cached_data
+
+    # 캐시 미스 - Firestore에서 조회
     try:
         clean_region = region.replace("/", "_").replace(" ", "_")
         beach_id_str = str(beach_id)
-        
+
         metadata_ref = (db.collection("regions")
                          .document(clean_region)
                          .collection(beach_id_str)
                          .document("_metadata"))
-        
+
         doc = metadata_ref.get()
-        return doc.to_dict() if doc.exists else None
+        result = doc.to_dict() if doc.exists else None
+
+        # 캐시 저장 (존재하는 경우에만)
+        if result:
+            cache_utils.set("metadata", region, beach_id, data=result)
+
+        return result
     except Exception as e:
         print(f"메타데이터 조회 실패: {e}")
         return None
@@ -388,20 +439,33 @@ def get_beach_metadata_by_id(region, beach_id):
 def get_current_conditions_by_id(region, beach_id):
     """
     Beach ID를 사용해 특정 해변의 현재 시간 이후 가장 가까운 예보 1건 조회
+    캐싱: 10분 (현재 상태는 자주 조회됨)
     """
+    # 캐시 확인
+    cached_data = cache_utils.get("current", region, beach_id)
+    if cached_data:
+        return cached_data
+
+    # 캐시 미스 - Firestore에서 조회
     kst_now = get_kst_now()
     clean_region = region.replace("/", "_").replace(" ", "_")
     beach_id_str = str(beach_id)
-    
+
     # Beach ID 기반 구조: regions/{region}/{beach_id}
     ref = (db.collection("regions").document(clean_region)
              .collection(beach_id_str)
              .where("timestamp", ">=", kst_now)
              .order_by("timestamp")
              .limit(1))
-    
+
     docs = list(ref.stream())
-    return docs[0].to_dict() if docs else None
+    result = docs[0].to_dict() if docs else None
+
+    # 캐시 저장 (존재하는 경우에만)
+    if result:
+        cache_utils.set("current", region, beach_id, data=result)
+
+    return result
 
 
 # -------------------------
@@ -411,6 +475,7 @@ def get_current_conditions_by_id(region, beach_id):
 def get_beach_forecast(region, beach, hours=24):
     """
     기존 beach 이름 기반 조회 (호환성 유지)
+    안전 제한: 최대 100개 문서
     """
     kst_now = get_kst_now()
     start_time = kst_now.replace(minute=0, second=0, microsecond=0)
@@ -419,11 +484,13 @@ def get_beach_forecast(region, beach, hours=24):
     clean_region = region.replace("/", "_").replace(" ", "_")
     clean_beach = beach.replace("/", "_").replace(" ", "_")
 
+    # 안전 제한 추가: .limit(100)
     ref = (db.collection("regions").document(clean_region)
              .collection(clean_beach)
              .where("timestamp", ">=", start_time)
              .where("timestamp", "<=", end_time)
-             .order_by("timestamp"))
+             .order_by("timestamp")
+             .limit(100))
 
     return [doc.to_dict() for doc in ref.stream()]
 
