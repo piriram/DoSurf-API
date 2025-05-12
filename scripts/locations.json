@@ -1,102 +1,40 @@
 [
-  {
-    "beach_id": 1001,
-    "region": "gangreung",
-    "region_name": "강릉",
-    "region_order": 1,
-    "beach": "jeongdongjin",
-    "display_name": "정동진",
-    "lat": 37.7714,
-    "lon": 129.1234
-  },
-  {
-    "beach_id": 1002,
-    "region": "gangreung",
-    "region_name": "강릉",
-    "region_order": 1,
-    "beach": "sacheonjin",
-    "display_name": "사천진",
-    "lat": 37.8241,
-    "lon": 128.9092
-  },
-  {
-    "beach_id": 1003,
-    "region": "gangreung",
-    "region_name": "강릉",
-    "region_order": 1,
-    "beach": "sageunjin",
-    "display_name": "사근진",
-    "lat": 37.7973,
-    "lon": 128.9184
-  },
-   {
-    "beach_id": 1004,
-    "region": "gangreung",
-    "region_name": "강릉",
-    "region_order": 1,
-    "beach": "sacheon",
-    "display_name": "사천",
-    "lat": 37.8292,
-    "lon": 128.9037
-  },
-  {
-    "beach_id": 2001,
-    "region": "pohang",
-    "region_name": "포항",
-    "region_order": 2,
-    "beach": "wolpo",
-    "display_name": "월포",
-    "lat": 36.0014,
-    "lon": 129.2523
-  },
-   {
-    "beach_id": 2002,
-    "region": "pohang",
-    "region_name": "포항",
-    "region_order": 2,
-    "beach": "sinhangman",
-    "display_name": "신항만",
-    "lat": 35.9819,
-    "lon": 129.4227
-  },
-  {
-    "beach_id": 3001,
-    "region": "jeju",
-    "region_name": "제주",
-    "region_order": 3,
-    "beach": "jungmun",
-    "display_name": "중문",
-    "lat": 33.4996,
-    "lon": 126.5312
-  },
-  {
-    "beach_id": 3002,
-    "region": "jeju",
-    "region_name": "제주",
-    "region_order": 3,
-    "beach": "ihoteu",
-    "display_name": "이호테우",
-    "lat": 33.4975,
-    "lon": 126.4525
-  },
-  {
-    "beach_id": 3003,
-    "region": "jeju",
-    "region_name": "제주",
-    "region_order": 3,
-    "beach": "woljeong",
-    "display_name": "월정",
-    "lat": 33.5564,
-    "lon": 126.7953
-  },
-  {
-    "beach_id": 4001,
-    "region": "busan",
-    "region_name": "부산",
-    "region_order": 4,
-    "beach": "songjeong",
-    "display_name": "송정",
-    "lat": 35.1796,
-    "lon": 129.1635
-  }
+  { "beach_id": 1001, "region": "yangyang", "region_name": "양양", "region_order": 1, "beach": "jukdo", "display_name": "죽도", "lat": 37.9723, "lon": 128.7595 },
+  { "beach_id": 1002, "region": "yangyang", "region_name": "양양", "region_order": 1, "beach": "ingu", "display_name": "인구", "lat": 38.0083, "lon": 128.7498 },
+  { "beach_id": 1003, "region": "yangyang", "region_name": "양양", "region_order": 1, "beach": "gisamun", "display_name": "기사문", "lat": 38.0242, "lon": 128.7349 },
+  { "beach_id": 1004, "region": "yangyang", "region_name": "양양", "region_order": 1, "beach": "gaetmaeul", "display_name": "갯마을", "lat": 38.0414, "lon": 128.7206 },
+  { "beach_id": 1005, "region": "yangyang", "region_name": "양양", "region_order": 1, "beach": "namae3ri", "display_name": "남애3리", "lat": 37.9694, "lon": 128.754 },
+  { "beach_id": 1006, "region": "yangyang", "region_name": "양양", "region_order": 1, "beach": "mulchi", "display_name": "물치", "lat": 37.9973, "lon": 128.7556 },
+
+  { "beach_id": 2001, "region": "pohang", "region_name": "포항 / 울산 / 영덕", "region_order": 2, "beach": "wolpo", "display_name": "포항 월포", "lat": 36.2014, "lon": 129.3606 },
+  { "beach_id": 2002, "region": "pohang", "region_name": "포항 / 울산 / 영덕", "region_order": 2, "beach": "sinhangman", "display_name": "포항 신항만", "lat": 36.0257, "lon": 129.4076 },
+  { "beach_id": 2003, "region": "pohang", "region_name": "포항 / 울산 / 영덕", "region_order": 2, "beach": "yeongildae", "display_name": "포항 영일대", "lat": 36.0563, "lon": 129.3802 },
+  { "beach_id": 2004, "region": "pohang", "region_name": "포항 / 울산 / 영덕", "region_order": 2, "beach": "jinha", "display_name": "울산 진하", "lat": 35.3833, "lon": 129.3655 },
+  { "beach_id": 2005, "region": "pohang", "region_name": "포항 / 울산 / 영덕", "region_order": 2, "beach": "buheung", "display_name": "영덕 부흥", "lat": 36.4171, "lon": 129.3704 },
+
+  { "beach_id": 3001, "region": "jeju", "region_name": "제주", "region_order": 3, "beach": "sagye", "display_name": "사계", "lat": 33.2278, "lon": 126.3075 },
+  { "beach_id": 3002, "region": "jeju", "region_name": "제주", "region_order": 3, "beach": "jungmun", "display_name": "중문", "lat": 33.2475, "lon": 126.4107 },
+  { "beach_id": 3003, "region": "jeju", "region_name": "제주", "region_order": 3, "beach": "woljeong", "display_name": "월정", "lat": 33.5561, "lon": 126.7955 },
+  { "beach_id": 3004, "region": "jeju", "region_name": "제주", "region_order": 3, "beach": "gimnyeong", "display_name": "김녕", "lat": 33.5582, "lon": 126.7593 },
+  { "beach_id": 3005, "region": "jeju", "region_name": "제주", "region_order": 3, "beach": "hamdeok", "display_name": "함덕", "lat": 33.5439, "lon": 126.6699 },
+  { "beach_id": 3006, "region": "jeju", "region_name": "제주", "region_order": 3, "beach": "ihoteu", "display_name": "이호테우", "lat": 33.4977, "lon": 126.4524 },
+
+  { "beach_id": 4001, "region": "busan", "region_name": "부산", "region_order": 4, "beach": "songjeong", "display_name": "송정", "lat": 35.1789, "lon": 129.202 },
+  { "beach_id": 4002, "region": "busan", "region_name": "부산", "region_order": 4, "beach": "dadaepo", "display_name": "다대포", "lat": 35.0451, "lon": 128.9637 },
+  { "beach_id": 4003, "region": "busan", "region_name": "부산", "region_order": 4, "beach": "gwangalli", "display_name": "광안리", "lat": 35.1532, "lon": 129.1187 },
+
+  { "beach_id": 5001, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "geumjin", "display_name": "강릉 금진", "lat": 37.6959, "lon": 129.0278 },
+  { "beach_id": 5002, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "gyengpo", "display_name": "강릉 경포", "lat": 37.7951, "lon": 128.9091 },
+  { "beach_id": 5003, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "namae", "display_name": "강릉 남애", "lat": 37.9347, "lon": 128.8217 },
+  { "beach_id": 5004, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "sacheonjin", "display_name": "강릉 사천진", "lat": 37.8448, "lon": 128.8754 },
+  { "beach_id": 5005, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "sacheon", "display_name": "강릉 사천", "lat": 37.8257, "lon": 128.8758 },
+  { "beach_id": 5006, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "daejin", "display_name": "동해 대진", "lat": 37.5383, "lon": 129.1042 },
+  { "beach_id": 5007, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "yonghwa", "display_name": "삼척 용화", "lat": 37.3231, "lon": 129.2965 },
+
+  { "beach_id": 6001, "region": "sokcho", "region_name": "고성 / 속초", "region_order": 6, "beach": "songjiho", "display_name": "고성 송지호", "lat": 38.3312, "lon": 128.5266 },
+  { "beach_id": 6002, "region": "sokcho", "region_name": "고성 / 속초", "region_order": 6, "beach": "cheonjin", "display_name": "고성 천진", "lat": 38.376, "lon": 128.4762 },
+  { "beach_id": 6003, "region": "sokcho", "region_name": "고성 / 속초", "region_order": 6, "beach": "sokcho", "display_name": "속초 속초", "lat": 38.2043, "lon": 128.5923 },
+
+  { "beach_id": 8001, "region": "west_south", "region_name": "서해 / 남해", "region_order": 7, "beach": "manripo", "display_name": "태안 만리포", "lat": 36.7915, "lon": 126.1458 },
+  { "beach_id": 8002, "region": "west_south", "region_name": "서해 / 남해", "region_order": 7, "beach": "namyeol", "display_name": "고흥 남열 해돋이", "lat": 34.5768, "lon": 127.4375 }
 ]
