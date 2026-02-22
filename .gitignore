@@ -1,9 +1,20 @@
+# macOS
+.DS_Store
+
 # Python bytecode
 __pycache__/
 
 # Python virtual environment
 venv/
 *.local
+
+# Sensitive files (legacy)
 secrets/
 serviceAccountKey.json
+
+# Sensitive files (new single folder policy)
+private/*
+!private/README.md
+
+# Firebase local logs
 firebase-debug.log

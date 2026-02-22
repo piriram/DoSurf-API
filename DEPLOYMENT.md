@@ -37,6 +37,11 @@ git status
 git pull
 ```
 
+### 1-4. 민감정보(키) 위치 확인
+
+- 로컬 키 파일은 `private/keys/` 아래에 둡니다.
+- 예: `private/keys/serviceAccountKey.json`
+
 ---
 
 ## 2) 배포 전 체크리스트
