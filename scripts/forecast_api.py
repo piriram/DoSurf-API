@@ -24,7 +24,14 @@ def _load_api_key():
     # 환경 변수 없으면 에러
     raise ValueError("❌ KMA_API_KEY environment variable not found")
 
-AUTH_KEY = _load_api_key()
+_AUTH_KEY = None
+
+
+def _get_auth_key():
+    global _AUTH_KEY
+    if _AUTH_KEY is None:
+        _AUTH_KEY = _load_api_key()
+    return _AUTH_KEY
 
 def latlon_to_xy(lat, lon):
     RE, GRID = 6371.00877, 5.0
@@ -72,7 +79,7 @@ def prev_basetime(base_date, base_time):
 
 def request_vilage(base_date, base_time, nx, ny):
     params = {
-        "authKey": AUTH_KEY,
+        "authKey": _get_auth_key(),
         "numOfRows": 1000,
         "pageNo": 1,
         "dataType": "JSON",

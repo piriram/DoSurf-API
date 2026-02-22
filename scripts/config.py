@@ -23,7 +23,8 @@ def load_config():
                 "forecast_days": 4
             },
             "storage": {
-                "allowed_hours": [0, 3, 6, 9, 12, 15, 18, 21]
+                "allowed_hours": [0, 3, 6, 9, 12, 15, 18, 21],
+                "wave_height_offset": 0.5
             }
         }
 
@@ -46,3 +47,8 @@ def get_forecast_days():
 def get_allowed_hours():
     """저장 허용 시간"""
     return config["storage"]["allowed_hours"]
+
+
+def get_wave_height_offset():
+    """Open-Meteo 파고 보정값"""
+    return config["storage"].get("wave_height_offset", 0.5)

@@ -1,10 +1,11 @@
 # main.py - 서버 오류와 부분 데이터를 명확히 구분하는 버전
 import datetime
-import os, json
 
 from scripts.forecast_api import fetch_items_with_fallback, latlon_to_xy
 from scripts.open_meteo import fetch_marine
 from scripts.storage import save_forecasts_merged, update_region_beach_ids_list
+from scripts.beach_registry import load_locations
+from cleanup_old_forecasts import cleanup_old_forecasts
 
 # 설정 로드
 try:
@@ -19,13 +20,6 @@ except ImportError:
 # 예상 데이터 크기 (단기예보 3일 기준)
 EXPECTED_ITEM_COUNT = 72 * 11  # 72시간 * 11개 카테고리 = 792개
 EXPECTED_FORECAST_HOURS = 28   # 28개 시간대 (3일 * 8시간 + 4시간)
-
-def load_locations():
-    """locations.json 파일에서 위치 목록을 읽어오는 함수"""
-    base_dir = os.path.dirname(__file__)
-    path = os.path.join(base_dir, "scripts", "locations.json")
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 def update_region_metadata(locations):
     """각 지역의 해변 ID 목록을 메타데이터로 저장"""
@@ -51,7 +45,7 @@ def update_region_metadata(locations):
     for region, beach_data in region_beaches.items():
         update_region_beach_ids_list(region, beach_data)
 
-def main():
+def run_collection():
     """
     메인 실행 함수
     
@@ -79,6 +73,7 @@ def main():
 
         has_kma = False
         has_marine = False
+        forecast_count = 0
         picked = []
         marine = []
 
@@ -142,7 +137,6 @@ def main():
                 if has_kma and has_marine:
                     # KMA 데이터 완전성에 따라 분류
                     if picked:
-                        forecast_count = len(picked)
                         if forecast_count >= EXPECTED_FORECAST_HOURS * 0.9:
                             successful_updates += 1
                             print(f"   ✅ 전체 데이터 저장 완료")
@@ -188,6 +182,28 @@ def main():
         print(f"\n💡 권장사항:")
         print(f"   - 부분 데이터는 다음 실행({FORECAST_DAYS}시간 후)에 자동으로 보완됩니다")
         print(f"   - merge=True 옵션으로 기존 데이터와 자동 병합됩니다")
+
+    # 7일 이전 데이터 자동 삭제
+    cleanup_result = None
+    print("\n🧹 7일 이전 오래된 데이터 정리 중...")
+    try:
+        cleanup_result = cleanup_old_forecasts(days=7, dry_run=False, confirm=False)
+        deleted_docs = cleanup_result.get("deleted_documents", 0) if cleanup_result else 0
+        print(f"🧹 정리 완료: {deleted_docs}개 문서 삭제")
+    except Exception as e:
+        print(f"⚠️ 데이터 정리 실패 (수집 결과에는 영향 없음): {e}")
+
+    return {
+        "total": len(locations),
+        "success": successful_updates,
+        "partial": partial_updates,
+        "failed": failed_updates,
+        "cleanup": cleanup_result,
+    }
+
+
+def main():
+    run_collection()
 
 if __name__ == "__main__":
     main()

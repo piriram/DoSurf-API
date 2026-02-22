@@ -10,7 +10,8 @@
     "forecast_days": 3
   },
   "storage": {
-    "allowed_hours": [0, 3, 6, 9, 12, 15, 18, 21]
+    "allowed_hours": [0, 3, 6, 9, 12, 15, 18, 21],
+    "wave_height_offset": 0.5
   },
   "notes": {
     "schedule_comment": "Firebase Functions는 02:15, 05:15, 08:15, 11:15, 14:15, 17:15, 20:15, 23:15에 실행됩니다",
