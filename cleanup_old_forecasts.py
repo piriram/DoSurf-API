@@ -43,7 +43,7 @@ KST = ZoneInfo("Asia/Seoul")
 
 def get_old_forecasts(region, beach_id, cutoff_date, dry_run=False):
     """
-    특정 해변의 오래된 예보 데이터 조회
+    특정 해변의 오래된 예보 데이터 조회/삭제
 
     Args:
         region: 지역 이름
@@ -62,42 +62,55 @@ def get_old_forecasts(region, beach_id, cutoff_date, dry_run=False):
                        .document(clean_region)
                        .collection(beach_id_str))
 
-    # 오래된 데이터 쿼리 (메타데이터 문서 제외)
-    old_docs_query = (collection_ref
-                       .where("timestamp", "<", cutoff_date)
-                       .limit(500))  # 안전을 위해 한 번에 최대 500개
+    total_deleted = 0
 
-    docs = list(old_docs_query.stream())
+    while True:
+        # 오래된 데이터 쿼리 (메타데이터 문서 제외)
+        old_docs_query = (collection_ref
+                           .where("timestamp", "<", cutoff_date)
+                           .limit(500))  # 안전을 위해 한 번에 최대 500개
 
-    # 메타데이터 문서 제외
-    docs_to_delete = [doc for doc in docs if doc.id != "_metadata"]
+        docs = list(old_docs_query.stream())
+        docs_to_delete = [doc for doc in docs if doc.id != "_metadata"]
 
-    if not docs_to_delete:
-        return 0
+        if not docs_to_delete:
+            break
 
-    deleted_count = len(docs_to_delete)
+        current_count = len(docs_to_delete)
 
-    if dry_run:
-        print(f"   [DRY RUN] {deleted_count}개 문서 삭제 예정")
-        # 처음 3개만 샘플로 출력
-        for doc in docs_to_delete[:3]:
-            data = doc.to_dict()
-            timestamp = data.get("timestamp")
-            print(f"     - {doc.id}: {timestamp}")
-        if deleted_count > 3:
-            print(f"     ... 외 {deleted_count - 3}개")
-    else:
+        if dry_run:
+            total_deleted += current_count
+            print(f"   [DRY RUN] {current_count}개 문서 삭제 예정")
+            # 처음 3개만 샘플로 출력
+            for doc in docs_to_delete[:3]:
+                data = doc.to_dict()
+                timestamp = data.get("timestamp")
+                print(f"     - {doc.id}: {timestamp}")
+            if current_count > 3:
+                print(f"     ... 외 {current_count - 3}개")
+            # dry-run은 한 번만 조회
+            break
+
         # 배치로 삭제 (최대 500개)
         batch = db.batch()
         for doc in docs_to_delete:
             batch.delete(doc.reference)
         batch.commit()
-        print(f"   🗑️  {deleted_count}개 문서 삭제 완료")
 
-    return deleted_count
+        total_deleted += current_count
+        print(f"   🗑️  {current_count}개 문서 삭제 완료")
+
+        # 500개 미만이면 더 이상 삭제할 데이터 없음
+        if current_count < 500:
+            break
+
+    if total_deleted > 0 and not dry_run:
+        print(f"   🗑️  총 {total_deleted}개 문서 삭제 완료")
+
+    return total_deleted
 
 
-def cleanup_old_forecasts(days=10, dry_run=False, target_region=None, target_beach_id=None):
+def cleanup_old_forecasts(days=10, dry_run=False, target_region=None, target_beach_id=None, confirm=True):
     """
     오래된 예보 데이터 정리
 
@@ -106,6 +119,7 @@ def cleanup_old_forecasts(days=10, dry_run=False, target_region=None, target_bea
         dry_run: True면 실제 삭제하지 않고 미리보기만
         target_region: 특정 지역만 처리 (None이면 전체)
         target_beach_id: 특정 해변만 처리 (None이면 전체)
+        confirm: 실제 삭제 전 사용자 확인 여부
     """
     print("=" * 60)
     print(f"🧹 오래된 예보 데이터 정리 시작")
@@ -120,12 +134,17 @@ def cleanup_old_forecasts(days=10, dry_run=False, target_region=None, target_bea
     print(f"📅 삭제 기준: {cutoff_date.strftime('%Y-%m-%d %H:%M:%S KST')} 이전 데이터\n")
 
     # 경고 메시지
-    if not dry_run:
+    if not dry_run and confirm:
         print("⚠️  경고: 이 작업은 데이터를 영구적으로 삭제합니다!")
         response = input("   계속하시겠습니까? (yes/no): ")
         if response.lower() not in ["yes", "y"]:
             print("❌ 작업이 취소되었습니다.")
-            return
+            return {
+                "deleted_documents": 0,
+                "processed_beaches": 0,
+                "skipped_beaches": 0,
+                "total_beaches": 0,
+            }
         print()
 
     # locations 로드
@@ -142,7 +161,12 @@ def cleanup_old_forecasts(days=10, dry_run=False, target_region=None, target_bea
 
     if not locations:
         print("❌ 조건에 맞는 해변이 없습니다.")
-        return
+        return {
+            "deleted_documents": 0,
+            "processed_beaches": 0,
+            "skipped_beaches": 0,
+            "total_beaches": 0,
+        }
 
     print(f"📍 처리할 해변: {len(locations)}개\n")
 
@@ -188,6 +212,13 @@ def cleanup_old_forecasts(days=10, dry_run=False, target_region=None, target_bea
         print("\n💡 실제 삭제를 원하시면 --dry-run 없이 다시 실행하세요.")
     else:
         print(f"\n🎉 {days}일 이전 데이터가 성공적으로 삭제되었습니다!")
+
+    return {
+        "deleted_documents": total_deleted,
+        "processed_beaches": processed_beaches,
+        "skipped_beaches": skipped_beaches,
+        "total_beaches": len(locations),
+    }
 
 
 def main():
