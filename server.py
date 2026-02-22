@@ -4,6 +4,7 @@ import datetime
 import os
 
 from main import run_collection
+from scripts.alerts import send_telegram_alert
 
 app = Flask(__name__)
 
@@ -24,6 +25,17 @@ def collect():
         print(f"❌ 에러: {e}")
         import traceback
         traceback.print_exc()
+
+        alert_result = send_telegram_alert(
+            message=f"서버 collect 엔드포인트 예외 발생: {e}",
+            level="CRITICAL",
+            source="server.collect",
+        )
+        if alert_result.get("sent"):
+            print("📩 Telegram 장애 알림 전송 완료")
+        else:
+            print(f"ℹ️ Telegram 알림 미전송: {alert_result.get('reason')}")
+
         return jsonify({
             "success": False,
             "error": str(e)

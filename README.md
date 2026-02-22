@@ -25,6 +25,7 @@ do-surf-functions/
 │   ├── firebase_utils.py      # Firebase 초기화(lazy)
 │   ├── cache_utils.py         # 인메모리 캐시
 │   ├── path_utils.py          # Firestore 경로 sanitize
+│   ├── alerts.py              # Telegram 장애 알림
 │   └── locations.json         # 해변 마스터 데이터
 ├── private/                   # 민감정보 전용 폴더(키/토큰)
 │   └── README.md
@@ -77,6 +78,28 @@ python server.py
 
 - 수집 트리거: `GET/POST /`
 - 헬스체크: `GET /health`
+
+---
+
+## Telegram 장애 알림 설정
+
+문제 발생 시(수집 실패/서버 예외) Telegram 알림을 받으려면 Cloud Run 환경변수를 설정하세요.
+
+필수 환경변수:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+예시:
+
+```bash
+gcloud run services update do-surf-functions \
+  --region asia-northeast3 \
+  --update-env-vars "TELEGRAM_BOT_TOKEN=<bot_token>,TELEGRAM_CHAT_ID=<chat_id>"
+```
+
+메모:
+- 설정이 없으면 알림 전송은 자동으로 스킵됩니다(서비스 동작에는 영향 없음).
+- 알림 포맷/전송 로직은 `scripts/alerts.py`에 있습니다.
 
 ---
 
