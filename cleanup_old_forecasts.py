@@ -17,9 +17,9 @@
 
 import argparse
 import datetime
-import json
-import os
 from zoneinfo import ZoneInfo
+from scripts.beach_registry import load_locations
+from scripts.path_utils import sanitize_firestore_id
 
 # Firebase Admin SDK 초기화
 try:
@@ -41,19 +41,6 @@ except ImportError:
 # 한국 시간대
 KST = ZoneInfo("Asia/Seoul")
 
-def load_locations():
-    """locations.json 파일에서 위치 목록 읽기"""
-    base_dir = os.path.dirname(__file__)
-    path = os.path.join(base_dir, "scripts", "locations.json")
-
-    if not os.path.exists(path):
-        print(f"❌ locations.json 파일을 찾을 수 없습니다: {path}")
-        exit(1)
-
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
 def get_old_forecasts(region, beach_id, cutoff_date, dry_run=False):
     """
     특정 해변의 오래된 예보 데이터 조회
@@ -67,7 +54,7 @@ def get_old_forecasts(region, beach_id, cutoff_date, dry_run=False):
     Returns:
         삭제된(또는 삭제될) 문서 수
     """
-    clean_region = region.replace("/", "_").replace(" ", "_")
+    clean_region = sanitize_firestore_id(region)
     beach_id_str = str(beach_id)
 
     # 해변 컬렉션 참조

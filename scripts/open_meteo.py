@@ -14,11 +14,11 @@ def fetch_marine(lat: float, lon: float, *,
     
     반환 형식: 리스트[딕셔너리]
     각 원소는 다음 필드를 포함:
-      - datetime: ISO 형식 문자열 (예: "2025-09-25T12:00:00")
+      - om_datetime: ISO 형식 문자열 (예: "2025-09-25T12:00:00")
       - om_wave_height: 파고 (m)
       - om_wave_direction: 파향 (deg, 0~360)
-      - sea_surface_temperature: 수온 (°C)
-      - source: 데이터 출처 (여기서는 "open-meteo")
+      - om_sea_surface_temperature: 수온 (°C)
+      - om_source: 데이터 출처 (여기서는 "open-meteo")
     """
 
     # API 요청 파라미터

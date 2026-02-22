@@ -3,11 +3,18 @@ import datetime
 import math
 from zoneinfo import ZoneInfo  # Python 3.9+에서 사용 가능
 from .firebase_utils import db  # Firestore 클라이언트
-from .beach_registry import get_all_beach_ids_in_region  # 해변 레지스트리
+from .beach_registry import (
+    get_all_beach_ids_in_region as _registry_get_all_beach_ids_in_region,
+    load_locations,
+)
 from . import cache_utils  # 캐싱 레이어
+from .config import get_allowed_hours, get_wave_height_offset
+from .path_utils import sanitize_firestore_id
 
 # 3시간 간격 저장 시간 (0, 3, 6, 9, 12, 15, 18, 21시)
-ALLOWED_HOURS = {0, 3, 6, 9, 12, 15, 18, 21}
+ALLOWED_HOURS = set(get_allowed_hours())
+# Open-Meteo 파고 보정값(기본 0.5m): config.json(storage.wave_height_offset)에서 조정 가능.
+WAVE_HEIGHT_OFFSET = float(get_wave_height_offset())
 
 # 한국 시간대 설정
 KST = ZoneInfo("Asia/Seoul")
@@ -15,6 +22,10 @@ KST = ZoneInfo("Asia/Seoul")
 def get_kst_now():
     """현재 한국 시간을 반환"""
     return datetime.datetime.now(tz=KST)
+
+
+def _sanitize_id(value):
+    return sanitize_firestore_id(value)
 
 def save_forecasts_merged(region, beach, beach_id, picked, marine):
     """
@@ -98,10 +109,9 @@ def save_forecasts_merged(region, beach, beach_id, picked, marine):
             print(f"   ⚠ 값 변환 실패: {category}={raw_value} -> {e}")
             continue
 
-
-   # -------------------------
-# 2) Open-Meteo 데이터 병합 (개선!)
-# -------------------------
+    # -------------------------
+    # 2) Open-Meteo 데이터 병합 (개선!)
+    # -------------------------
     for r in marine:  # marine: Open-Meteo 결과 리스트
         dt_str = r["om_datetime"]
         dt_obj = datetime.datetime.fromisoformat(dt_str)
@@ -120,7 +130,10 @@ def save_forecasts_merged(region, beach, beach_id, picked, marine):
             }
         
         # Open-Meteo 데이터 추가
-        time_groups[dt_str]["om_wave_height"] = r.get("om_wave_height", 0) + 0.5
+        raw_wave_height = r.get("om_wave_height")
+        time_groups[dt_str]["om_wave_height"] = (
+            (float(raw_wave_height) if raw_wave_height is not None else 0.0) + WAVE_HEIGHT_OFFSET
+        )
         time_groups[dt_str]["om_wave_direction"] = r.get("om_wave_direction")
         time_groups[dt_str]["om_sea_surface_temperature"] = r.get("om_sea_surface_temperature")
 
@@ -142,7 +155,7 @@ def save_forecasts_merged(region, beach, beach_id, picked, marine):
             doc_id = dt.strftime("%Y%m%d%H%M")  # 문서 ID는 YYYYMMDDHHMM
 
             # Firestore에서 사용할 region 이름 정리 (특수문자 제거)
-            clean_region = region.replace("/", "_").replace(" ", "_")
+            clean_region = _sanitize_id(region)
             # Beach ID를 문자열로 변환 (컬렉션 이름으로 사용)
             beach_id_str = str(beach_id)
 
@@ -172,7 +185,7 @@ def save_forecasts_merged(region, beach, beach_id, picked, marine):
         # -------------------------
         # 4) 메타데이터를 같은 배치에 추가 (배치 쓰기 통합)
         # -------------------------
-        clean_region = region.replace("/", "_").replace(" ", "_")
+        clean_region = _sanitize_id(region)
         beach_id_str = str(beach_id)
         kst_now = get_kst_now()
 
@@ -210,50 +223,6 @@ def save_forecasts_merged(region, beach, beach_id, picked, marine):
         print(f"   🔄 캐시 무효화 완료: {region}-{beach}({beach_id})")
     else:
         print("   ⚠ 저장할 데이터 없음")
-
-
-def update_beach_metadata(region, beach, beach_id, forecast_count, earliest_time=None, latest_time=None):
-    """
-    해변별 메타데이터 문서 업데이트 (Beach ID 사용)
-    - 마지막 업데이트 시간을 한국 시간으로 설정
-    - 예보 개수
-    - 첫 번째/마지막 예보 시간
-    """
-    try:
-        clean_region = region.replace("/", "_").replace(" ", "_")
-        beach_id_str = str(beach_id)
-        
-        metadata_ref = (db.collection("regions")
-                         .document(clean_region)
-                         .collection(beach_id_str)
-                         .document("_metadata"))
-        
-        # 한국 시간으로 업데이트 시간 설정
-        kst_now = get_kst_now()
-        
-        metadata = {
-            "beach_id": beach_id,
-            "region": region,
-            "beach": beach,
-            "last_updated": kst_now,  # 한국 시간 사용
-            "total_forecasts": forecast_count,
-            "status": "active"
-        }
-        
-        # 예보 시간 범위 정보
-        if earliest_time:
-            metadata["earliest_forecast"] = earliest_time
-        if latest_time:
-            metadata["latest_forecast"] = latest_time
-            
-        # 다음 예보 시간은 클라이언트가 계산하도록 함 (쿼리 비용 절감)
-        # next_forecast_time 필드 제거 - 불필요한 post-write 쿼리 제거
-
-        metadata_ref.set(metadata)
-        print(f"   📊 메타데이터 업데이트: {region}-{beach}({beach_id}) at {kst_now.strftime('%Y-%m-%d %H:%M:%S KST')}")
-        
-    except Exception as e:
-        print(f"   ⚠ 메타데이터 업데이트 실패: {e}")
 
 
 # -------------------------
@@ -313,7 +282,7 @@ def update_region_beach_ids_list(region, beach_data_list):
     새로운 앱 버전에서는 update_global_beaches_list()를 사용하는 것을 권장합니다.
     """
     try:
-        clean_region = region.replace("/", "_").replace(" ", "_")
+        clean_region = _sanitize_id(region)
         ref = (db.collection("regions")
                  .document(clean_region)
                  .collection("_region_metadata")
@@ -339,28 +308,8 @@ def update_region_beach_ids_list(region, beach_data_list):
         print(f"⚠ 지역 해변 ID 목록 업데이트 실패: {e}")
 
 def get_all_beach_ids_in_region(region):
-    """
-    특정 지역의 모든 해변 ID 목록 조회
-    """
-    try:
-        clean_region = region.replace("/", "_").replace(" ", "_")
-        beaches_ref = (db.collection("regions")
-                        .document(clean_region)
-                        .collection("_region_metadata")
-                        .document("beaches"))
-        doc = beaches_ref.get()
-        if doc.exists:
-            data = doc.to_dict()
-            return {
-                "beach_ids": data.get("beach_ids", []),
-                "beach_mapping": data.get("beach_mapping", {}),
-                "total_beaches": data.get("total_beaches", 0)
-            }
-    except Exception as e:
-        print(f"해변 ID 목록 조회 실패: {e}")
-    
-    # 기본값 반환
-    return {"beach_ids": [], "beach_mapping": {}, "total_beaches": 0}
+    """특정 지역의 모든 해변 ID 목록 조회 (beach_registry 구현 위임)."""
+    return _registry_get_all_beach_ids_in_region(region)
 
 
 # -------------------------
@@ -383,7 +332,7 @@ def get_beach_forecast_by_id(region, beach_id, hours=24):
     start_time = kst_now.replace(minute=0, second=0, microsecond=0)
     end_time = start_time + datetime.timedelta(hours=hours)
 
-    clean_region = region.replace("/", "_").replace(" ", "_")
+    clean_region = _sanitize_id(region)
     beach_id_str = str(beach_id)
 
     # Beach ID 기반 구조: regions/{region}/{beach_id}
@@ -415,7 +364,7 @@ def get_beach_metadata_by_id(region, beach_id):
 
     # 캐시 미스 - Firestore에서 조회
     try:
-        clean_region = region.replace("/", "_").replace(" ", "_")
+        clean_region = _sanitize_id(region)
         beach_id_str = str(beach_id)
 
         metadata_ref = (db.collection("regions")
@@ -448,7 +397,7 @@ def get_current_conditions_by_id(region, beach_id):
 
     # 캐시 미스 - Firestore에서 조회
     kst_now = get_kst_now()
-    clean_region = region.replace("/", "_").replace(" ", "_")
+    clean_region = _sanitize_id(region)
     beach_id_str = str(beach_id)
 
     # Beach ID 기반 구조: regions/{region}/{beach_id}
@@ -481,8 +430,8 @@ def get_beach_forecast(region, beach, hours=24):
     start_time = kst_now.replace(minute=0, second=0, microsecond=0)
     end_time = start_time + datetime.timedelta(hours=hours)
 
-    clean_region = region.replace("/", "_").replace(" ", "_")
-    clean_beach = beach.replace("/", "_").replace(" ", "_")
+    clean_region = _sanitize_id(region)
+    clean_beach = _sanitize_id(beach)
 
     # 안전 제한 추가: .limit(100)
     ref = (db.collection("regions").document(clean_region)
@@ -500,8 +449,8 @@ def get_beach_metadata(region, beach):
     기존 beach 이름 기반 메타데이터 조회 (호환성 유지)
     """
     try:
-        clean_region = region.replace("/", "_").replace(" ", "_")
-        clean_beach = beach.replace("/", "_").replace(" ", "_")
+        clean_region = _sanitize_id(region)
+        clean_beach = _sanitize_id(beach)
         
         metadata_ref = (db.collection("regions")
                          .document(clean_region)
@@ -520,18 +469,21 @@ def get_all_beaches_in_region(region):
     기존 beach 이름 기반 조회 (호환성 유지)
     """
     try:
-        beaches_ref = db.collection("regions").document(region).collection("_region_metadata").document("beaches")
+        clean_region = _sanitize_id(region)
+        beaches_ref = (db.collection("regions")
+                       .document(clean_region)
+                       .collection("_region_metadata")
+                       .document("beaches"))
         doc = beaches_ref.get()
         if doc.exists:
             return doc.to_dict().get("beach_names", [])
-    except:
+    except Exception:
         pass
-    
-    beach_defaults = {
-        "busan": ["songjeong", "haeundae", "gwangalli"],
-        "jeju": ["hyeopjae", "jungmun", "hamdeok"]
-    }
-    return beach_defaults.get(region, [])
+
+    defaults = {}
+    for loc in load_locations():
+        defaults.setdefault(loc["region"], []).append(loc["beach"])
+    return defaults.get(region, [])
 
 
 def get_current_conditions(region, beach):
@@ -539,8 +491,8 @@ def get_current_conditions(region, beach):
     기존 beach 이름 기반 현재 상태 조회 (호환성 유지)
     """
     kst_now = get_kst_now()
-    clean_region = region.replace("/", "_").replace(" ", "_")
-    clean_beach = beach.replace("/", "_").replace(" ", "_")
+    clean_region = _sanitize_id(region)
+    clean_beach = _sanitize_id(beach)
     
     ref = (db.collection("regions").document(clean_region)
              .collection(clean_beach)

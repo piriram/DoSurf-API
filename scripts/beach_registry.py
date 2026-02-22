@@ -6,23 +6,36 @@
 """
 import os
 import json
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 import datetime
-from .firebase_utils import db
+from .path_utils import sanitize_firestore_id
 
 KST = ZoneInfo("Asia/Seoul")
+LOCATIONS_PATH = os.path.join(os.path.dirname(__file__), "locations.json")
+
+
+def _get_db():
+    """Lazy import to keep locations helpers usable without Firebase init."""
+    from .firebase_utils import db
+    return db
+
 
 def get_kst_now():
     """현재 한국 시간을 반환"""
     return datetime.datetime.now(tz=KST)
 
 
+@lru_cache(maxsize=1)
 def load_locations():
     """locations.json 파일에서 해변 정보 로드"""
-    base_dir = os.path.dirname(os.path.dirname(__file__))
-    path = os.path.join(base_dir, "scripts", "locations.json")
-    with open(path, "r", encoding="utf-8") as f:
+    with open(LOCATIONS_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def clear_locations_cache():
+    """locations.json 메모리 캐시 초기화."""
+    load_locations.cache_clear()
 
 
 def update_global_beach_list(locations):
@@ -33,7 +46,7 @@ def update_global_beach_list(locations):
     locations: locations.json에서 로드한 전체 해변 데이터
     """
     try:
-        ref = db.collection("_global_metadata").document("all_beaches")
+        ref = _get_db().collection("_global_metadata").document("all_beaches")
         
         # 해변 목록 생성
         beaches = []
@@ -78,8 +91,8 @@ def update_region_beach_ids_list(region, beach_data_list):
     beach_data_list: [{"beach_id": 1001, "beach": "jukdo", "display_name": "죽도"}, ...]
     """
     try:
-        clean_region = region.replace("/", "_").replace(" ", "_")
-        ref = (db.collection("regions")
+        clean_region = sanitize_firestore_id(region)
+        ref = (_get_db().collection("regions")
                  .document(clean_region)
                  .collection("_region_metadata")
                  .document("beaches"))
@@ -146,7 +159,7 @@ def get_all_beaches():
     전체 해변 목록 조회
     """
     try:
-        ref = db.collection("_global_metadata").document("all_beaches")
+        ref = _get_db().collection("_global_metadata").document("all_beaches")
         doc = ref.get()
         if doc.exists:
             data = doc.to_dict()
@@ -167,8 +180,8 @@ def get_all_beach_ids_in_region(region):
     특정 지역의 모든 해변 ID 목록 조회
     """
     try:
-        clean_region = region.replace("/", "_").replace(" ", "_")
-        beaches_ref = (db.collection("regions")
+        clean_region = sanitize_firestore_id(region)
+        beaches_ref = (_get_db().collection("regions")
                         .document(clean_region)
                         .collection("_region_metadata")
                         .document("beaches"))

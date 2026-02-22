@@ -37,5 +37,12 @@ def get_db():
         "or running on Cloud Run without proper permissions."
     )
 
-# 모듈 로드 시 초기화
-db = get_db()
+
+class _LazyFirestoreClient:
+    """Lazy proxy for Firestore client to avoid import-time initialization."""
+
+    def __getattr__(self, item):
+        return getattr(get_db(), item)
+
+
+db = _LazyFirestoreClient()

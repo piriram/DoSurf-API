@@ -1,16 +1,13 @@
 # scripts/add_location.py
 import json
-import os
 
-LOCATIONS_FILE = os.path.join("scripts", "locations.json")
+from scripts.beach_registry import LOCATIONS_PATH, clear_locations_cache, load_locations
 
-def load_locations():
-    with open(LOCATIONS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 def save_locations(locations):
-    with open(LOCATIONS_FILE, "w", encoding="utf-8") as f:
+    with open(LOCATIONS_PATH, "w", encoding="utf-8") as f:
         json.dump(locations, f, ensure_ascii=False, indent=2)
+    clear_locations_cache()
 
 def get_next_beach_id(locations, region):
     """해당 지역의 다음 beach_id 생성"""

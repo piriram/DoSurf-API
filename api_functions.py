@@ -1,10 +1,12 @@
 # api_functions.py
 import json
-import os
+from typing import Optional
 from firebase_functions import https_fn
 from firebase_admin import initialize_app
 from scripts.firebase_utils import db
 from scripts import cache_utils  # 캐싱 레이어 추가
+from scripts.beach_registry import load_locations
+from scripts.path_utils import sanitize_firestore_id
 
 # Firebase 앱 초기화
 try:
@@ -12,13 +14,18 @@ try:
 except ValueError:
     pass
 
-# locations.json 경로
-LOCATIONS_FILE = os.path.join(os.path.dirname(__file__), "scripts", "locations.json")
-
-def load_locations():
-    """locations.json 파일 로드"""
-    with open(LOCATIONS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+def _json_response(data: dict, status: int = 200, cache_status: Optional[str] = None) -> https_fn.Response:
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*"
+    }
+    if cache_status is not None:
+        headers["X-Cache"] = cache_status
+    return https_fn.Response(
+        json.dumps(data, ensure_ascii=False),
+        status=status,
+        headers=headers
+    )
 
 def get_regions_from_locations():
     """
@@ -78,15 +85,7 @@ def get_all_locations(req: https_fn.Request) -> https_fn.Response:
         # 캐시 확인
         cached_data = cache_utils.get("beaches", "all_locations")
         if cached_data:
-            return https_fn.Response(
-                json.dumps(cached_data, ensure_ascii=False),
-                status=200,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "Access-Control-Allow-Origin": "*",
-                    "X-Cache": "HIT"  # 캐시 히트 표시
-                }
-            )
+            return _json_response(cached_data, status=200, cache_status="HIT")
 
         # 캐시 미스 - Firestore에서 조회
         locations = load_locations()
@@ -118,25 +117,11 @@ def get_all_locations(req: https_fn.Request) -> https_fn.Response:
         # 캐시 저장
         cache_utils.set("beaches", "all_locations", data=response_data)
         
-        return https_fn.Response(
-            json.dumps(response_data, ensure_ascii=False),
-            status=200,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
+        return _json_response(response_data, status=200)
         
     except Exception as e:
         print(f"❌ Error in get_all_locations: {e}")
-        return https_fn.Response(
-            json.dumps({"error": str(e)}, ensure_ascii=False),
-            status=500,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
+        return _json_response({"error": str(e)}, status=500)
 
 
 @https_fn.on_request(cors=https_fn.CorsOptions(
@@ -153,15 +138,7 @@ def get_regions(req: https_fn.Request) -> https_fn.Response:
         # 캐시 확인
         cached_data = cache_utils.get("regions", "all")
         if cached_data:
-            return https_fn.Response(
-                json.dumps(cached_data, ensure_ascii=False),
-                status=200,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "Access-Control-Allow-Origin": "*",
-                    "X-Cache": "HIT"
-                }
-            )
+            return _json_response(cached_data, status=200, cache_status="HIT")
 
         # 캐시 미스 - 데이터 조회
         regions = get_regions_from_locations()
@@ -170,26 +147,11 @@ def get_regions(req: https_fn.Request) -> https_fn.Response:
         # 캐시 저장
         cache_utils.set("regions", "all", data=response_data)
 
-        return https_fn.Response(
-            json.dumps(response_data, ensure_ascii=False),
-            status=200,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*",
-                "X-Cache": "MISS"
-            }
-        )
+        return _json_response(response_data, status=200, cache_status="MISS")
         
     except Exception as e:
         print(f"❌ Error in get_regions: {e}")
-        return https_fn.Response(
-            json.dumps({"error": str(e)}, ensure_ascii=False),
-            status=500,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
+        return _json_response({"error": str(e)}, status=500)
 
 
 @https_fn.on_request(cors=https_fn.CorsOptions(
@@ -206,32 +168,15 @@ def get_beaches_by_region(req: https_fn.Request) -> https_fn.Response:
         region = req.args.get("region")
 
         if not region:
-            return https_fn.Response(
-                json.dumps({
-                    "error": "region parameter is required"
-                }, ensure_ascii=False),
-                status=400,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "Access-Control-Allow-Origin": "*"
-                }
-            )
+            return _json_response({"error": "region parameter is required"}, status=400)
 
         # 캐시 확인
         cached_data = cache_utils.get("beaches", region)
         if cached_data:
-            return https_fn.Response(
-                json.dumps(cached_data, ensure_ascii=False),
-                status=200,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "Access-Control-Allow-Origin": "*",
-                    "X-Cache": "HIT"
-                }
-            )
+            return _json_response(cached_data, status=200, cache_status="HIT")
 
         # 캐시 미스 - Firestore에서 조회
-        clean_region = region.replace("/", "_").replace(" ", "_")
+        clean_region = sanitize_firestore_id(region)
 
         beaches_ref = (db.collection("regions")
                       .document(clean_region)
@@ -241,16 +186,7 @@ def get_beaches_by_region(req: https_fn.Request) -> https_fn.Response:
         doc = beaches_ref.get()
         
         if not doc.exists:
-            return https_fn.Response(
-                json.dumps({
-                    "error": f"Region '{region}' not found"
-                }, ensure_ascii=False),
-                status=404,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "Access-Control-Allow-Origin": "*"
-                }
-            )
+            return _json_response({"error": f"Region '{region}' not found"}, status=404)
         
         data = doc.to_dict()
         beach_ids = data.get("beach_ids", [])
@@ -279,26 +215,11 @@ def get_beaches_by_region(req: https_fn.Request) -> https_fn.Response:
         # 캐시 저장
         cache_utils.set("beaches", region, data=response_data)
 
-        return https_fn.Response(
-            json.dumps(response_data, ensure_ascii=False),
-            status=200,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*",
-                "X-Cache": "MISS"
-            }
-        )
+        return _json_response(response_data, status=200, cache_status="MISS")
         
     except Exception as e:
         print(f"❌ Error in get_beaches_by_region: {e}")
-        return https_fn.Response(
-            json.dumps({"error": str(e)}, ensure_ascii=False),
-            status=500,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
+        return _json_response({"error": str(e)}, status=500)
 
 
 @https_fn.on_request(cors=https_fn.CorsOptions(
@@ -316,32 +237,15 @@ def get_beach_info(req: https_fn.Request) -> https_fn.Response:
         beach_id = req.args.get("beach_id")
 
         if not region or not beach_id:
-            return https_fn.Response(
-                json.dumps({
-                    "error": "region and beach_id parameters are required"
-                }, ensure_ascii=False),
-                status=400,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "Access-Control-Allow-Origin": "*"
-                }
-            )
+            return _json_response({"error": "region and beach_id parameters are required"}, status=400)
 
         # 캐시 확인
         cached_data = cache_utils.get("metadata", region, beach_id)
         if cached_data:
-            return https_fn.Response(
-                json.dumps(cached_data, ensure_ascii=False),
-                status=200,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "Access-Control-Allow-Origin": "*",
-                    "X-Cache": "HIT"
-                }
-            )
+            return _json_response(cached_data, status=200, cache_status="HIT")
 
         # 캐시 미스 - Firestore에서 조회
-        clean_region = region.replace("/", "_").replace(" ", "_")
+        clean_region = sanitize_firestore_id(region)
         beach_id_str = str(beach_id)
 
         metadata_ref = (db.collection("regions")
@@ -352,16 +256,7 @@ def get_beach_info(req: https_fn.Request) -> https_fn.Response:
         doc = metadata_ref.get()
         
         if not doc.exists:
-            return https_fn.Response(
-                json.dumps({
-                    "error": f"Beach not found: {region}/{beach_id}"
-                }, ensure_ascii=False),
-                status=404,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "Access-Control-Allow-Origin": "*"
-                }
-            )
+            return _json_response({"error": f"Beach not found: {region}/{beach_id}"}, status=404)
         
         metadata = doc.to_dict()
         beach_en = metadata.get("beach", "")
@@ -387,23 +282,8 @@ def get_beach_info(req: https_fn.Request) -> https_fn.Response:
         # 캐시 저장
         cache_utils.set("metadata", region, beach_id, data=response_data)
 
-        return https_fn.Response(
-            json.dumps(response_data, ensure_ascii=False),
-            status=200,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*",
-                "X-Cache": "MISS"
-            }
-        )
+        return _json_response(response_data, status=200, cache_status="MISS")
         
     except Exception as e:
         print(f"❌ Error in get_beach_info: {e}")
-        return https_fn.Response(
-            json.dumps({"error": str(e)}, ensure_ascii=False),
-            status=500,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
+        return _json_response({"error": str(e)}, status=500)
