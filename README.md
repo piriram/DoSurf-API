@@ -89,6 +89,10 @@ python server.py
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
+권장(Cloud Monitoring Webhook 연동 시):
+- `MONITORING_WEBHOOK_USER`
+- `MONITORING_WEBHOOK_PASS`
+
 예시:
 
 ```bash
@@ -100,6 +104,7 @@ gcloud run services update do-surf-functions \
 메모:
 - 설정이 없으면 알림 전송은 자동으로 스킵됩니다(서비스 동작에는 영향 없음).
 - 알림 포맷/전송 로직은 `scripts/alerts.py`에 있습니다.
+- Cloud Monitoring 알림을 앱으로 포워딩하려면 `POST /monitoring-alert` 엔드포인트를 사용합니다.
 
 ---
 
