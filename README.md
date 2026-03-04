@@ -1,56 +1,118 @@
-# DoSurf Functions
+# DoSurf API Backend
 
-DoSurf 서핑 예보 백엔드 저장소입니다.
+DoSurf 서핑 예보 백엔드입니다.
 
-기능은 크게 2가지입니다.
-- **예보 수집 파이프라인**: `main.py` (KMA + Open-Meteo 수집/병합/저장)
-- **실행 엔드포인트**: `server.py` (Cloud Run에서 수집 트리거), `api_functions.py` (Firebase HTTP 함수)
+이 저장소는 크게 **3가지 역할**을 수행합니다.
+
+1. **예보 수집/병합 파이프라인**
+   - 기상청(KMA) + Open-Meteo 데이터를 수집
+   - 해변별 예보를 병합/정규화
+   - Firestore 저장 + 메타데이터 업데이트 + 캐시 무효화
+2. **실행 엔드포인트(Cloud Run)**
+   - 스케줄러/수동 호출로 수집 실행
+   - 헬스체크
+   - Cloud Monitoring Webhook 수신 후 Telegram 포워딩
+3. **조회 API(Firebase HTTP Functions)**
+   - 지역/해변 목록 조회
+   - 해변 메타데이터 조회
 
 ---
 
-## 폴더 구조
+## 아키텍처 개요
 
 ```text
-do-surf-functions/
+Cloud Scheduler
+   └─(POST /)──────────────────────┐
+                                   ▼
+                         Cloud Run (server.py)
+                           ├─ run_collection() (main.py)
+                           │   ├─ KMA API
+                           │   ├─ Open-Meteo API
+                           │   └─ Firestore 저장
+                           ├─ /health
+                           └─ /monitoring-alert
+                                  └─ Telegram 알림(scripts/alerts.py)
+
+Client App
+   └─ Firebase HTTP Functions (api_functions.py)
+       ├─ get_all_locations
+       ├─ get_regions
+       ├─ get_beaches_by_region
+       └─ get_beach_info
+```
+
+---
+
+## 주요 파일 구조
+
+```text
+.
 ├── main.py                    # 수집 메인 로직(run_collection)
-├── server.py                  # Flask 엔드포인트 (/ , /health)
-├── api_functions.py           # Firebase HTTP 함수들
+├── server.py                  # Cloud Run 엔드포인트(/, /health, /monitoring-alert)
+├── api_functions.py           # Firebase HTTP Functions
 ├── cleanup_old_forecasts.py   # 오래된 예보 정리 스크립트
 ├── config.json                # 수집/저장 설정
 ├── scripts/
-│   ├── forecast_api.py        # 기상청 API 연동
+│   ├── forecast_api.py        # 기상청 API 연동 + fallback
 │   ├── open_meteo.py          # Open-Meteo API 연동
 │   ├── storage.py             # Firestore 저장/조회
-│   ├── beach_registry.py      # 해변 메타데이터/locations 로딩
+│   ├── beach_registry.py      # locations 로딩/해변 메타
 │   ├── firebase_utils.py      # Firebase 초기화(lazy)
 │   ├── cache_utils.py         # 인메모리 캐시
 │   ├── path_utils.py          # Firestore 경로 sanitize
-│   ├── alerts.py              # Telegram 장애 알림
-│   └── locations.json         # 해변 마스터 데이터
-├── private/                   # 민감정보 전용 폴더(키/토큰)
+│   └── alerts.py              # Telegram 장애 알림
+├── private/                   # 민감정보 폴더(Git 제외)
 │   └── README.md
-├── DEPLOYMENT.md              # 배포 상세 가이드
+├── DEPLOYMENT.md              # Cloud Run 배포 가이드
 └── requirements.txt
 ```
 
 ---
 
-## 민감정보 관리(중요)
+## 실행 엔드포인트 (Cloud Run)
 
-이 저장소는 **Git에 올리면 안 되는 파일을 `private/` 한 폴더로 관리**합니다.
+### `GET/POST /`
+예보 수집 트리거 엔드포인트.
 
-- 권장 위치: `private/keys/serviceAccountKey.json`
-- `.gitignore`에서 `private/README.md`만 추적, 나머지는 무시
-- 기존 `secrets/` 경로도 레거시 호환으로만 유지
+- 성공 시 200 + 결과 JSON 반환
+- 전체 위치가 모두 실패하면 500 반환 (모니터링 감지 목적)
 
-Firebase 로컬 초기화 키 탐색 순서:
-1. `private/keys/serviceAccountKey.json` (권장)
-2. `private/serviceAccountKey.json`
-3. `secrets/serviceAccountKey.json` (legacy)
+### `GET /health`
+헬스체크 엔드포인트.
+
+```json
+{"status":"healthy"}
+```
+
+### `POST /monitoring-alert`
+Cloud Monitoring Webhook 수신 엔드포인트.
+
+- incident payload를 Telegram으로 포워딩
+- `MONITORING_WEBHOOK_USER/PASS` 설정 시 Basic Auth 검증
 
 ---
 
-## 로컬 실행
+## 조회 API (Firebase Functions)
+
+> 구현 파일: `api_functions.py`
+
+- `get_all_locations`
+  - 전체 지역 + 해변 목록 반환
+- `get_regions`
+  - 지역 목록 반환
+- `get_beaches_by_region?region=<region>`
+  - 특정 지역 해변 목록 반환
+- `get_beach_info?region=<region>&beach_id=<id>`
+  - 특정 해변 메타데이터 반환
+
+응답 공통:
+- JSON 응답
+- CORS 허용(`*`)
+- 캐시 사용 시 `X-Cache` 헤더(HIT/MISS)
+
+---
+
+## 로컬 개발
 
 ### 1) 의존성 설치
 
@@ -64,10 +126,10 @@ pip install firebase-functions
 ### 2) 문법 체크
 
 ```bash
-python3 -m py_compile main.py server.py api_functions.py cleanup_old_forecasts.py \
-  scripts/storage.py scripts/beach_registry.py scripts/add_location.py \
-  scripts/firebase_utils.py scripts/forecast_api.py scripts/config.py \
-  scripts/open_meteo.py scripts/path_utils.py
+python3 -m py_compile \
+  main.py server.py api_functions.py cleanup_old_forecasts.py \
+  scripts/storage.py scripts/beach_registry.py scripts/firebase_utils.py \
+  scripts/forecast_api.py scripts/open_meteo.py scripts/path_utils.py scripts/alerts.py
 ```
 
 ### 3) 로컬 서버 실행
@@ -76,45 +138,25 @@ python3 -m py_compile main.py server.py api_functions.py cleanup_old_forecasts.p
 python server.py
 ```
 
-- 수집 트리거: `GET/POST /`
-- 헬스체크: `GET /health`
-
----
-
-## Telegram 장애 알림 설정
-
-문제 발생 시(수집 실패/서버 예외) Telegram 알림을 받으려면 Cloud Run 환경변수를 설정하세요.
-
-필수 환경변수:
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-
-권장(Cloud Monitoring Webhook 연동 시):
-- `MONITORING_WEBHOOK_USER`
-- `MONITORING_WEBHOOK_PASS`
-
-예시:
+테스트:
 
 ```bash
-gcloud run services update do-surf-functions \
-  --region asia-northeast3 \
-  --update-env-vars "TELEGRAM_BOT_TOKEN=<bot_token>,TELEGRAM_CHAT_ID=<chat_id>"
+curl -sS http://127.0.0.1:8080/health
+curl -sS -X POST http://127.0.0.1:8080/
 ```
 
-메모:
-- 설정이 없으면 알림 전송은 자동으로 스킵됩니다(서비스 동작에는 영향 없음).
-- 알림 포맷/전송 로직은 `scripts/alerts.py`에 있습니다.
-- Cloud Monitoring 알림을 앱으로 포워딩하려면 `POST /monitoring-alert` 엔드포인트를 사용합니다.
-
 ---
 
-## 배포
+## 배포 (Cloud Run)
 
-Cloud Run 배포 절차는 `DEPLOYMENT.md` 참고.
+상세 절차는 `DEPLOYMENT.md` 참고.
 
-핵심 명령만 빠르게 보면:
+빠른 배포:
 
 ```bash
+gcloud config set project dosurf-api
+gcloud config set run/region asia-northeast3
+
 gcloud run deploy do-surf-functions \
   --source . \
   --region asia-northeast3 \
@@ -122,16 +164,66 @@ gcloud run deploy do-surf-functions \
   --quiet
 ```
 
-배포 후:
+배포 후 확인:
 
 ```bash
-curl -sS https://<service-url>/health
+curl -sS https://do-surf-functions-900402500777.asia-northeast3.run.app/health
 ```
 
 ---
 
-## 운영 팁
+## 운영/모니터링
 
-- 배포 전 `git status` / `py_compile` 확인
-- `config.json` 변경 시 수집 정책(시간대, 일수, 파고 오프셋) 같이 점검
-- 이슈 발생 시 Cloud Run 리비전 롤백 우선
+### Telegram 장애 알림
+
+필수 환경변수:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+선택(모니터링 웹훅 인증):
+- `MONITORING_WEBHOOK_USER`
+- `MONITORING_WEBHOOK_PASS`
+
+### 알림 정책
+
+Cloud Monitoring 정책으로 다음을 감시:
+- KMA API Key 누락
+- 수집 전체 실패
+- Cloud Run 5xx
+- Deadman (성공 로그 장시간 미유입)
+
+현재 Deadman 정책은 스케줄 공백을 고려해 **14시간** 기준으로 설정됨.
+
+---
+
+## 민감정보/보안
+
+민감정보는 `private/` 폴더에 보관하고 Git에 커밋하지 않습니다.
+
+Firebase 키 탐색 순서:
+1. `private/keys/serviceAccountKey.json` (권장)
+2. `private/serviceAccountKey.json`
+3. `secrets/serviceAccountKey.json` (legacy)
+
+---
+
+## 트러블슈팅
+
+### 1) deadman 알림이 자주 뜰 때
+- Cloud Scheduler 주기/실패 여부 확인
+- deadman duration이 스케줄 공백보다 짧지 않은지 확인
+
+### 2) `/monitoring-alert` 401 발생
+- Basic Auth 설정값(`MONITORING_WEBHOOK_USER/PASS`)과
+  webhook notifier 인증 정보가 일치하는지 확인
+
+### 3) 수집은 되는데 일부 데이터만 저장될 때
+- KMA 응답 완전성(아이템 수) 확인
+- Open-Meteo 호출 상태 확인
+- 로그에서 partial 저장 메시지 확인
+
+---
+
+## 라이선스
+
+내부 프로젝트 기준으로 운영 중입니다. 필요 시 별도 라이선스 정책을 추가하세요.
