@@ -10,14 +10,19 @@ from scripts.alerts import send_telegram_alert
 app = Flask(__name__)
 
 
+def _is_production() -> bool:
+    env = (os.environ.get("ENV") or os.environ.get("FLASK_ENV") or "").lower()
+    return env in {"prod", "production"}
+
+
 def _is_monitoring_webhook_authorized(req) -> bool:
     """Cloud Monitoring webhook basic auth 검증"""
     expected_user = os.environ.get("MONITORING_WEBHOOK_USER")
     expected_pass = os.environ.get("MONITORING_WEBHOOK_PASS")
 
-    # 미설정이면 인증 우회 (초기 설정 편의)
+    # 운영 환경에서는 인증정보 미설정 시 차단
     if not expected_user and not expected_pass:
-        return True
+        return not _is_production()
 
     auth = req.authorization
     if not auth:
@@ -29,7 +34,7 @@ def _is_monitoring_webhook_authorized(req) -> bool:
     )
 
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/', methods=['POST'])
 def collect():
     """수집 엔드포인트"""
     print("🌊 예보 수집 시작:", datetime.datetime.now().isoformat())
@@ -103,11 +108,13 @@ def monitoring_alert():
         source="cloud-monitoring",
     )
 
+    sent = alert_result.get("sent", False)
+    status_code = 200 if sent else 502
     return jsonify({
-        "ok": True,
-        "sent": alert_result.get("sent", False),
+        "ok": sent,
+        "sent": sent,
         "reason": alert_result.get("reason"),
-    }), 200
+    }), status_code
 
 
 @app.route('/health', methods=['GET'])

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import time
 from typing import Dict, Any
 
 import requests
@@ -43,9 +44,15 @@ def send_telegram_alert(message: str, *, level: str = "ERROR", source: str = "do
         "disable_web_page_preview": True,
     }
 
-    try:
-        resp = requests.post(url, json=payload, timeout=10)
-        resp.raise_for_status()
-        return {"sent": True, "reason": None, "response": resp.json()}
-    except Exception as e:
-        return {"sent": False, "reason": f"send_failed: {e}", "response": None}
+    last_error = None
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload, timeout=10)
+            resp.raise_for_status()
+            return {"sent": True, "reason": None, "response": resp.json()}
+        except Exception as e:
+            last_error = e
+            if attempt < 2:
+                time.sleep(0.5 * (2 ** attempt))
+
+    return {"sent": False, "reason": f"send_failed: {last_error}", "response": None}

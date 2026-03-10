@@ -98,7 +98,8 @@ def run_collection():
                         })
                 
                 if picked:
-                    forecast_count = len(picked)
+                    forecast_time_slots = {p["datetime"] for p in picked}
+                    forecast_count = len(forecast_time_slots)
                     has_kma = True
                     
                     # 데이터 완전성 평가

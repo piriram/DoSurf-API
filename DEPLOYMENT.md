@@ -64,8 +64,9 @@ python3 -m py_compile main.py server.py api_functions.py cleanup_old_forecasts.p
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
-- (선택) `MONITORING_WEBHOOK_USER`, `MONITORING_WEBHOOK_PASS`  
-  Cloud Monitoring Webhook(`/monitoring-alert`) 인증에 사용
+- (권장) `ENV=production`
+- (필수 권장) `MONITORING_WEBHOOK_USER`, `MONITORING_WEBHOOK_PASS`  
+  Cloud Monitoring Webhook(`/monitoring-alert`) 인증에 사용 (production에서 미설정 시 401)
 
 ```bash
 gcloud run services update do-surf-functions \
