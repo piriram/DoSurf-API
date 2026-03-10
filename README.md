@@ -111,10 +111,17 @@ graph LR
 │   ├── storage.py
 │   ├── firebase_utils.py
 │   └── alerts.py                # backward-compatible shim
-├── cleanup_old_forecasts.py
+├── jobs/
+│   ├── api_functions.py
+│   └── cleanup_old_forecasts.py
+├── docs/
+│   ├── DEPLOYMENT.md
+│   ├── CLEANUP_GUIDE.md
+│   └── REFACTORING_REPORT.md
+├── api_functions.py             # jobs/api_functions.py 호환 래퍼
+├── cleanup_old_forecasts.py     # jobs/cleanup_old_forecasts.py 호환 래퍼
 ├── server.py                    # app/api/routes.py 진입 래퍼
 ├── main.py                      # app/services/collection.py 진입 래퍼
-├── DEPLOYMENT.md
 └── requirements.txt
 ```
 
@@ -148,7 +155,7 @@ curl -sS http://127.0.0.1:8080/health
 
 ## ☁️ 배포
 
-배포 절차/환경변수는 `DEPLOYMENT.md`를 참고하세요.
+배포 절차/환경변수는 `docs/DEPLOYMENT.md`를 참고하세요.
 
 핵심 환경변수:
 
