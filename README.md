@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>해양 예보 데이터를 수집·정규화·저장하고, 장애를 감지/알림하는 서핑 백엔드</strong>
+  <strong>해양 예보 데이터를 수집, 정규화, 저장하고 장애를 감지/알림하는 서핑 백엔드</strong>
 </p>
 
 <p align="center">
@@ -117,6 +117,7 @@ graph LR
 ├── docs/
 │   ├── DEPLOYMENT.md
 │   ├── CLEANUP_GUIDE.md
+│   ├── AUTO_CLEANUP_PLAN.md
 │   └── REFACTORING_REPORT.md
 ├── api_functions.py             # jobs/api_functions.py 호환 래퍼
 ├── cleanup_old_forecasts.py     # jobs/cleanup_old_forecasts.py 호환 래퍼
