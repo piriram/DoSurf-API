@@ -133,7 +133,9 @@ graph LR
 
 ---
 
-## 🚀 로컬 실행
+## 🚀 로컬 실행 예시
+
+아래는 로컬 검증용 기본 실행 예시입니다.
 
 ```bash
 python3 -m venv venv
@@ -142,26 +144,17 @@ pip install -r requirements.txt
 python server.py
 ```
 
-헬스체크:
-
 ```bash
 curl -sS http://127.0.0.1:8080/health
 ```
 
 ---
 
-## ☁️ 배포
+## ☁️ 배포 및 운영 설정
 
-배포 절차/환경변수는 `docs/DEPLOYMENT.md`를 참고하세요.
+배포 절차와 운영 환경변수는 `docs/DEPLOYMENT.md`에 정리되어 있습니다.
 
-핵심 환경변수:
-
-- `ENV=production`
-- `COLLECT_JOB_TOKEN`
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `MONITORING_WEBHOOK_USER`
-- `MONITORING_WEBHOOK_PASS`
+> 참고: production 환경에서는 인증 관련 환경변수 설정이 필요합니다.
 
 ---
 
