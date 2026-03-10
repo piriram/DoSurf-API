@@ -1,8 +1,5 @@
 # 두섭이 백엔드 (DoSurf Backend)
 
-<p align="center">
-  <img src="images/dosurf-backend-icon.png" width="120" alt="DoSurf Backend Icon">
-</p>
 
 <p align="center">
   <strong>해양 예보 데이터를 수집, 정규화, 저장하고 장애를 감지/알림하는 서핑 백엔드</strong>
@@ -27,12 +24,11 @@
 두섭이 백엔드는 초보 서퍼가 복잡한 기상/해양 데이터를 직접 해석하지 않아도 되도록,
 외부 예보 데이터를 주기적으로 수집해 앱에서 바로 쓸 수 있는 형태로 가공/저장합니다.
 
-또한 Cloud Monitoring + Telegram 알림을 통해 장애를 빠르게 감지하고 대응할 수 있게 설계했습니다.
+또한 Cloud Monitoring 알림을 통해 장애를 빠르게 감지하고 대응할 수 있게 설계했습니다.
 
-- **핵심 기간**: 2025.11 - 진행중
+- **핵심 기간**: 2025.09 - 진행중
 - **역할**: Backend 개발 / 운영 자동화
 - **배포 환경**: GCP Cloud Run
-- **레포지토리**: [piriram/DoSurf-API](https://github.com/piriram/DoSurf-API)
 
 ---
 
@@ -173,8 +169,8 @@ curl -sS http://127.0.0.1:8080/health
 
 | 버전 | 설명 | 비고 |
 |------|------|------|
-| v2.0 | app 레이어 분리 + 인증/알림/테스트성 강화 | 현재 |
-| v1.x | 초기 수집/저장 파이프라인 | 초기 운영 |
+| v2.0 | app 레이어 분리 + 인증/알림 추가 | 현재 운영중 |
+| v1.0 | 초기 수집/저장 파이프라인 | 초기 운영 |
 
 ---
 
