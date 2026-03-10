@@ -71,10 +71,7 @@ def get_beach_name_mapping():
     return mapping
 
 
-@https_fn.on_request(cors=https_fn.CorsOptions(
-    cors_origins="*",
-    cors_methods=["get", "post"]
-))
+@https_fn.on_request()
 def get_all_locations(req: https_fn.Request) -> https_fn.Response:
     """
     모든 지역과 해변 정보를 한 번에 반환
@@ -124,10 +121,7 @@ def get_all_locations(req: https_fn.Request) -> https_fn.Response:
         return _json_response({"error": str(e)}, status=500)
 
 
-@https_fn.on_request(cors=https_fn.CorsOptions(
-    cors_origins="*",
-    cors_methods=["get", "post"]
-))
+@https_fn.on_request()
 def get_regions(req: https_fn.Request) -> https_fn.Response:
     """
     모든 지역 목록 반환
@@ -154,10 +148,7 @@ def get_regions(req: https_fn.Request) -> https_fn.Response:
         return _json_response({"error": str(e)}, status=500)
 
 
-@https_fn.on_request(cors=https_fn.CorsOptions(
-    cors_origins="*",
-    cors_methods=["get", "post"]
-))
+@https_fn.on_request()
 def get_beaches_by_region(req: https_fn.Request) -> https_fn.Response:
     """
     특정 지역의 해변 목록 반환
@@ -222,10 +213,7 @@ def get_beaches_by_region(req: https_fn.Request) -> https_fn.Response:
         return _json_response({"error": str(e)}, status=500)
 
 
-@https_fn.on_request(cors=https_fn.CorsOptions(
-    cors_origins="*",
-    cors_methods=["get", "post"]
-))
+@https_fn.on_request()
 def get_beach_info(req: https_fn.Request) -> https_fn.Response:
     """
     특정 해변의 상세 정보 반환 (메타데이터 포함)
