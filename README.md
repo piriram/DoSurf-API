@@ -25,13 +25,14 @@ Cloud Scheduler
    └─(POST /)──────────────────────┐
                                    ▼
                          Cloud Run (server.py)
-                           ├─ run_collection() (main.py)
-                           │   ├─ KMA API
-                           │   ├─ Open-Meteo API
-                           │   └─ Firestore 저장
-                           ├─ /health
-                           └─ /monitoring-alert
-                                  └─ Telegram 알림(scripts/alerts.py)
+                           ├─ app/api/routes.py
+                           │   ├─ run_collection() (app/services/collection.py)
+                           │   │   ├─ KMA API
+                           │   │   ├─ Open-Meteo API
+                           │   │   └─ Firestore 저장
+                           │   ├─ /health
+                           │   └─ /monitoring-alert
+                           └─ Telegram 알림(app/clients/alerts.py)
 
 Client App
    └─ Firebase HTTP Functions (api_functions.py)
@@ -47,8 +48,13 @@ Client App
 
 ```text
 .
-├── main.py                    # 수집 메인 로직(run_collection)
-├── server.py                  # Cloud Run 엔드포인트(/, /health, /monitoring-alert)
+├── server.py                  # Cloud Run 진입점(호환용, app/api/routes.py 사용)
+├── main.py                    # 배치 진입점(호환용, app/services/collection.py 사용)
+├── app/
+│   ├── api/routes.py          # Flask 라우트(/, /health, /monitoring-alert)
+│   ├── services/collection.py # 수집 메인 로직(run_collection)
+│   ├── clients/alerts.py      # Telegram 장애 알림
+│   └── config/settings.py     # 실행 설정/상수
 ├── api_functions.py           # Firebase HTTP Functions
 ├── cleanup_old_forecasts.py   # 오래된 예보 정리 스크립트
 ├── config.json                # 수집/저장 설정
@@ -60,7 +66,7 @@ Client App
 │   ├── firebase_utils.py      # Firebase 초기화(lazy)
 │   ├── cache_utils.py         # 인메모리 캐시
 │   ├── path_utils.py          # Firestore 경로 sanitize
-│   └── alerts.py              # Telegram 장애 알림
+│   └── alerts.py              # 호환용 import shim
 ├── private/                   # 민감정보 폴더(Git 제외)
 │   └── README.md
 ├── DEPLOYMENT.md              # Cloud Run 배포 가이드
@@ -71,7 +77,7 @@ Client App
 
 ## 실행 엔드포인트 (Cloud Run)
 
-### `GET/POST /`
+### `POST /`
 예보 수집 트리거 엔드포인트.
 
 - 성공 시 200 + 결과 JSON 반환

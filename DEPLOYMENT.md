@@ -50,6 +50,7 @@ git pull
 
 ```bash
 python3 -m py_compile main.py server.py api_functions.py cleanup_old_forecasts.py \
+  app/api/routes.py app/services/collection.py app/clients/alerts.py app/config/settings.py \
   scripts/storage.py scripts/beach_registry.py scripts/add_location.py \
   scripts/firebase_utils.py scripts/forecast_api.py scripts/config.py \
   scripts/open_meteo.py scripts/path_utils.py scripts/alerts.py
