@@ -18,25 +18,33 @@
 import argparse
 import datetime
 from zoneinfo import ZoneInfo
+
 from scripts.beach_registry import load_locations
 from scripts.path_utils import sanitize_firestore_id
 
-# Firebase Admin SDK 초기화
-try:
-    from firebase_admin import initialize_app, firestore
-    import firebase_admin
 
-    # 이미 초기화되었는지 확인
+def _get_db():
+    """Lazy Firebase client initialization to keep module import side-effect free."""
+    global _DB_CLIENT
+    if _DB_CLIENT is not None:
+        return _DB_CLIENT
+
+    try:
+        from firebase_admin import initialize_app, firestore
+        import firebase_admin
+    except ImportError as e:
+        raise RuntimeError("Firebase Admin SDK가 설치되지 않았습니다. (pip install firebase-admin)") from e
+
     try:
         firebase_admin.get_app()
     except ValueError:
         initialize_app()
 
-    db = firestore.client()
-except ImportError:
-    print("❌ Firebase Admin SDK가 설치되지 않았습니다.")
-    print("   설치: pip install firebase-admin")
-    exit(1)
+    _DB_CLIENT = firestore.client()
+    return _DB_CLIENT
+
+
+_DB_CLIENT = None
 
 # 한국 시간대
 KST = ZoneInfo("Asia/Seoul")
@@ -54,6 +62,7 @@ def get_old_forecasts(region, beach_id, cutoff_date, dry_run=False):
     Returns:
         삭제된(또는 삭제될) 문서 수
     """
+    db = _get_db()
     clean_region = sanitize_firestore_id(region)
     beach_id_str = str(beach_id)
 
