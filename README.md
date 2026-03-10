@@ -82,7 +82,7 @@ graph LR
   C --> E[Open-Meteo API]
   C --> F[Firestore Save/Merge]
   C --> G[Cleanup Old Forecasts]
-  H[Cloud Monitoring Incident] --> I[/monitoring-alert]
+  H[Cloud Monitoring Incident] --> I[monitoring-alert endpoint]
   I --> J[Telegram Alert]
 ```
 
