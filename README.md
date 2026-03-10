@@ -1,237 +1,184 @@
-# DoSurf API Backend
+# 두섭이 백엔드 (DoSurf Backend)
 
-DoSurf 서핑 예보 백엔드입니다.
+<p align="center">
+  <img src="images/dosurf-backend-icon.png" width="120" alt="DoSurf Backend Icon">
+</p>
 
-이 저장소는 크게 **3가지 역할**을 수행합니다.
+<p align="center">
+  <strong>해양 예보 데이터를 수집·정규화·저장하고, 장애를 감지/알림하는 서핑 백엔드</strong>
+</p>
 
-1. **예보 수집/병합 파이프라인**
-   - 기상청(KMA) + Open-Meteo 데이터를 수집
-   - 해변별 예보를 병합/정규화
-   - Firestore 저장 + 메타데이터 업데이트 + 캐시 무효화
-2. **실행 엔드포인트(Cloud Run)**
-   - 스케줄러/수동 호출로 수집 실행
-   - 헬스체크
-   - Cloud Monitoring Webhook 수신 후 Telegram 포워딩
-3. **조회 API(Firebase HTTP Functions)**
-   - 지역/해변 목록 조회
-   - 해변 메타데이터 조회
+<p align="center">
+  Reliable forecast pipeline for surfers.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.12-blue?logo=python" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/Framework-Flask-black?logo=flask" alt="Flask">
+  <img src="https://img.shields.io/badge/Deploy-Cloud%20Run-4285F4?logo=googlecloud" alt="Cloud Run">
+  <img src="https://img.shields.io/badge/Database-Firestore-FFCA28?logo=firebase" alt="Firestore">
+  <img src="https://img.shields.io/badge/Status-Production-brightgreen" alt="Production">
+</p>
 
 ---
 
-## 아키텍처 개요
+## 🌊 프로젝트 소개
+
+두섭이 백엔드는 초보 서퍼가 복잡한 기상/해양 데이터를 직접 해석하지 않아도 되도록,
+외부 예보 데이터를 주기적으로 수집해 앱에서 바로 쓸 수 있는 형태로 가공/저장합니다.
+
+또한 Cloud Monitoring + Telegram 알림을 통해 장애를 빠르게 감지하고 대응할 수 있게 설계했습니다.
+
+- **핵심 기간**: 2025.11 - 진행중
+- **역할**: Backend 개발 / 운영 자동화
+- **배포 환경**: GCP Cloud Run
+- **레포지토리**: [piriram/DoSurf-API](https://github.com/piriram/DoSurf-API)
+
+---
+
+## ✨ 주요 기능
+
+- 🛰️ **예보 수집 파이프라인** — KMA + Open-Meteo 데이터를 주기적으로 수집
+- 🌐 **데이터 병합/정규화** — 앱 조회에 맞는 형태로 통합 가공
+- 🗄️ **Firestore 저장 및 메타 업데이트** — 지역/해변 메타데이터와 함께 저장
+- 🚨 **장애 알림** — Cloud Monitoring incident를 Telegram으로 포워딩
+- 🧹 **자동 정리** — 오래된 예보 문서를 주기적으로 cleanup
+- 🔐 **운영 보안 강화** — `X-Job-Token`, webhook 인증, secret scan pre-commit 훅
+
+---
+
+## 🛠 기술 스택
+
+| 분류 | 기술 |
+|------|------|
+| Language | Python 3.12 |
+| Framework | Flask |
+| Infra | Cloud Run, Cloud Scheduler, Cloud Monitoring |
+| Data | Firestore |
+| External API | KMA, Open-Meteo, Telegram Bot API |
+| Security | Basic Auth, `X-Job-Token`, gitleaks pre-commit |
+
+---
+
+## 🏗 아키텍처
+
+현재 구조는 API / Service / Client / Config 레이어를 분리해,
+운영 안정성을 유지하면서도 변경 범위를 작게 가져갈 수 있게 설계되어 있습니다.
 
 ```text
 Cloud Scheduler
-   └─(POST /)──────────────────────┐
-                                   ▼
-                         Cloud Run (server.py)
-                           ├─ app/api/routes.py
-                           │   ├─ run_collection() (app/services/collection.py)
-                           │   │   ├─ KMA API
-                           │   │   ├─ Open-Meteo API
-                           │   │   └─ Firestore 저장
-                           │   ├─ /health
-                           │   └─ /monitoring-alert
-                           └─ Telegram 알림(app/clients/alerts.py)
+   └─ POST / (X-Job-Token)
+        ↓
+Cloud Run (Flask)
+   ├─ app/api/routes.py            # HTTP 진입점
+   ├─ app/services/collection.py   # 수집 오케스트레이션
+   ├─ app/clients/alerts.py        # Telegram 알림
+   └─ scripts/storage.py           # Firestore 저장/메타 갱신
+```
 
-Client App
-   └─ Firebase HTTP Functions (api_functions.py)
-       ├─ get_all_locations
-       ├─ get_regions
-       ├─ get_beaches_by_region
-       └─ get_beach_info
+### 데이터 플로우
+
+```mermaid
+graph LR
+  A[Cloud Scheduler] --> B[POST /]
+  B --> C[run_collection]
+  C --> D[KMA API]
+  C --> E[Open-Meteo API]
+  C --> F[Firestore Save/Merge]
+  C --> G[Cleanup Old Forecasts]
+  H[Cloud Monitoring Incident] --> I[/monitoring-alert]
+  I --> J[Telegram Alert]
 ```
 
 ---
 
-## 주요 파일 구조
+## 📂 프로젝트 구조
 
 ```text
 .
-├── server.py                  # Cloud Run 진입점(호환용, app/api/routes.py 사용)
-├── main.py                    # 배치 진입점(호환용, app/services/collection.py 사용)
 ├── app/
-│   ├── api/routes.py          # Flask 라우트(/, /health, /monitoring-alert)
-│   ├── services/collection.py # 수집 메인 로직(run_collection)
-│   ├── clients/alerts.py      # Telegram 장애 알림
-│   └── config/settings.py     # 실행 설정/상수
-├── api_functions.py           # Firebase HTTP Functions
-├── cleanup_old_forecasts.py   # 오래된 예보 정리 스크립트
-├── config.json                # 수집/저장 설정
+│   ├── api/
+│   │   └── routes.py
+│   ├── services/
+│   │   └── collection.py
+│   ├── clients/
+│   │   └── alerts.py
+│   └── config/
+│       └── settings.py
 ├── scripts/
-│   ├── forecast_api.py        # 기상청 API 연동 + fallback
-│   ├── open_meteo.py          # Open-Meteo API 연동
-│   ├── storage.py             # Firestore 저장/조회
-│   ├── beach_registry.py      # locations 로딩/해변 메타
-│   ├── firebase_utils.py      # Firebase 초기화(lazy)
-│   ├── cache_utils.py         # 인메모리 캐시
-│   ├── path_utils.py          # Firestore 경로 sanitize
-│   └── alerts.py              # 호환용 import shim
-├── private/                   # 민감정보 폴더(Git 제외)
-│   └── README.md
-├── DEPLOYMENT.md              # Cloud Run 배포 가이드
+│   ├── forecast_api.py
+│   ├── open_meteo.py
+│   ├── storage.py
+│   ├── firebase_utils.py
+│   └── alerts.py                # backward-compatible shim
+├── cleanup_old_forecasts.py
+├── server.py                    # app/api/routes.py 진입 래퍼
+├── main.py                      # app/services/collection.py 진입 래퍼
+├── DEPLOYMENT.md
 └── requirements.txt
 ```
 
 ---
 
-## 실행 엔드포인트 (Cloud Run)
+## 🔐 운영 보안 포인트
 
-### `POST /`
-예보 수집 트리거 엔드포인트.
-
-- 요청 헤더 `X-Job-Token` 필요 (`COLLECT_JOB_TOKEN`과 일치)
-- production에서 토큰 미설정/불일치 시 401 반환
-- 성공 시 200 + 결과 JSON 반환
-- 전체 위치가 모두 실패하면 500 반환 (모니터링 감지 목적)
-
-### `GET /health`
-헬스체크 엔드포인트.
-
-```json
-{"status":"healthy"}
-```
-
-### `POST /monitoring-alert`
-Cloud Monitoring Webhook 수신 엔드포인트.
-
-- incident payload를 Telegram으로 포워딩
-- `MONITORING_WEBHOOK_USER/PASS` 설정 시 Basic Auth 검증
+- `POST /`는 `COLLECT_JOB_TOKEN` 기반 `X-Job-Token` 인증 사용
+- `/monitoring-alert`는 Basic Auth(`MONITORING_WEBHOOK_USER/PASS`) 검증
+- production에서 인증값 미설정 시 요청 차단(401)
+- pre-commit 단계에서 `gitleaks`로 민감정보 커밋 차단
 
 ---
 
-## 조회 API (Firebase Functions)
-
-> 구현 파일: `api_functions.py`
-
-- `get_all_locations`
-  - 전체 지역 + 해변 목록 반환
-- `get_regions`
-  - 지역 목록 반환
-- `get_beaches_by_region?region=<region>`
-  - 특정 지역 해변 목록 반환
-- `get_beach_info?region=<region>&beach_id=<id>`
-  - 특정 해변 메타데이터 반환
-
-응답 공통:
-- JSON 응답
-- CORS 허용(`*`)
-- 캐시 사용 시 `X-Cache` 헤더(HIT/MISS)
-
----
-
-## 로컬 개발
-
-### 1) 의존성 설치
+## 🚀 로컬 실행
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-pip install firebase-functions
-```
-
-### 2) 문법 체크
-
-```bash
-python3 -m py_compile \
-  main.py server.py api_functions.py cleanup_old_forecasts.py \
-  scripts/storage.py scripts/beach_registry.py scripts/firebase_utils.py \
-  scripts/forecast_api.py scripts/open_meteo.py scripts/path_utils.py scripts/alerts.py
-```
-
-### 3) 로컬 서버 실행
-
-```bash
 python server.py
 ```
 
-테스트:
+헬스체크:
 
 ```bash
 curl -sS http://127.0.0.1:8080/health
-curl -sS -X POST http://127.0.0.1:8080/
 ```
 
 ---
 
-## 배포 (Cloud Run)
+## ☁️ 배포
 
-상세 절차는 `DEPLOYMENT.md` 참고.
+배포 절차/환경변수는 `DEPLOYMENT.md`를 참고하세요.
 
-빠른 배포:
+핵심 환경변수:
 
-```bash
-gcloud config set project dosurf-api
-gcloud config set run/region asia-northeast3
-
-gcloud run deploy do-surf-functions \
-  --source . \
-  --region asia-northeast3 \
-  --allow-unauthenticated \
-  --quiet
-```
-
-배포 후 확인:
-
-```bash
-curl -sS https://do-surf-functions-900402500777.asia-northeast3.run.app/health
-```
-
----
-
-## 운영/모니터링
-
-### Telegram 장애 알림
-
-필수 환경변수:
+- `ENV=production`
+- `COLLECT_JOB_TOKEN`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
-
-선택(모니터링 웹훅 인증):
 - `MONITORING_WEBHOOK_USER`
 - `MONITORING_WEBHOOK_PASS`
 
-### 알림 정책
+---
 
-Cloud Monitoring 정책으로 다음을 감시:
-- KMA API Key 누락
-- 수집 전체 실패
-- Cloud Run 5xx
-- Deadman (성공 로그 장시간 미유입)
+## 🧾 버전 히스토리
 
-현재 Deadman 정책은 스케줄 공백을 고려해 **14시간** 기준으로 설정됨.
+| 버전 | 설명 | 비고 |
+|------|------|------|
+| v2.0 | app 레이어 분리 + 인증/알림/테스트성 강화 | 현재 |
+| v1.x | 초기 수집/저장 파이프라인 | 초기 운영 |
 
 ---
 
-## 민감정보/보안
+## 👨‍💻 개발자
 
-민감정보는 `private/` 폴더에 보관하고 Git에 커밋하지 않습니다.
-
-Firebase 키 탐색 순서:
-1. `private/keys/serviceAccountKey.json` (권장)
-2. `private/serviceAccountKey.json`
-3. `secrets/serviceAccountKey.json` (legacy)
+| <img alt="piriram" src="https://github.com/piriram.png" width="120"> |
+|:---:|
+| [piriram](https://github.com/piriram) |
+| Backend / iOS |
 
 ---
 
-## 트러블슈팅
+## License
 
-### 1) deadman 알림이 자주 뜰 때
-- Cloud Scheduler 주기/실패 여부 확인
-- deadman duration이 스케줄 공백보다 짧지 않은지 확인
-
-### 2) `/monitoring-alert` 401 발생
-- Basic Auth 설정값(`MONITORING_WEBHOOK_USER/PASS`)과
-  webhook notifier 인증 정보가 일치하는지 확인
-
-### 3) 수집은 되는데 일부 데이터만 저장될 때
-- KMA 응답 완전성(아이템 수) 확인
-- Open-Meteo 호출 상태 확인
-- 로그에서 partial 저장 메시지 확인
-
----
-
-## 라이선스
-
-내부 프로젝트 기준으로 운영 중입니다. 필요 시 별도 라이선스 정책을 추가하세요.
+MIT License
