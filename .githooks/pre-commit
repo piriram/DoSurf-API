@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "[pre-commit] gitleaks not found. Install: brew install gitleaks" >&2
+  exit 1
+fi
+
+echo "[pre-commit] Running gitleaks staged scan..."
+gitleaks protect --staged --redact --verbose
