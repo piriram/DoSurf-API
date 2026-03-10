@@ -66,13 +66,15 @@ python3 -m py_compile main.py server.py api_functions.py cleanup_old_forecasts.p
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 - (권장) `ENV=production`
+- (필수 권장) `COLLECT_JOB_TOKEN`  
+  수집 엔드포인트(`/`) 인증에 사용 (요청 헤더 `X-Job-Token`)
 - (필수 권장) `MONITORING_WEBHOOK_USER`, `MONITORING_WEBHOOK_PASS`  
   Cloud Monitoring Webhook(`/monitoring-alert`) 인증에 사용 (production에서 미설정 시 401)
 
 ```bash
 gcloud run services update do-surf-functions \
   --region asia-northeast3 \
-  --update-env-vars "TELEGRAM_BOT_TOKEN=<bot_token>,TELEGRAM_CHAT_ID=<chat_id>"
+  --update-env-vars "ENV=production,COLLECT_JOB_TOKEN=<job_token>,TELEGRAM_BOT_TOKEN=<bot_token>,TELEGRAM_CHAT_ID=<chat_id>"
 ```
 
 ---

@@ -80,6 +80,8 @@ Client App
 ### `POST /`
 예보 수집 트리거 엔드포인트.
 
+- 요청 헤더 `X-Job-Token` 필요 (`COLLECT_JOB_TOKEN`과 일치)
+- production에서 토큰 미설정/불일치 시 401 반환
 - 성공 시 200 + 결과 JSON 반환
 - 전체 위치가 모두 실패하면 500 반환 (모니터링 감지 목적)
 
