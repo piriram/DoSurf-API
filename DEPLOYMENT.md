@@ -52,11 +52,26 @@ git pull
 python3 -m py_compile main.py server.py api_functions.py cleanup_old_forecasts.py \
   scripts/storage.py scripts/beach_registry.py scripts/add_location.py \
   scripts/firebase_utils.py scripts/forecast_api.py scripts/config.py \
-  scripts/open_meteo.py scripts/path_utils.py
+  scripts/open_meteo.py scripts/path_utils.py scripts/alerts.py
 ```
 
 - 문법 오류 없음
 - 브랜치/커밋 상태 확인
+
+### 2-1) Telegram 장애 알림 환경변수(선택)
+
+문제 발생 시 iPhone Telegram 알림을 받으려면 아래 환경변수를 설정하세요.
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- (선택) `MONITORING_WEBHOOK_USER`, `MONITORING_WEBHOOK_PASS`  
+  Cloud Monitoring Webhook(`/monitoring-alert`) 인증에 사용
+
+```bash
+gcloud run services update do-surf-functions \
+  --region asia-northeast3 \
+  --update-env-vars "TELEGRAM_BOT_TOKEN=<bot_token>,TELEGRAM_CHAT_ID=<chat_id>"
+```
 
 ---
 

@@ -5,6 +5,7 @@ from scripts.forecast_api import fetch_items_with_fallback, latlon_to_xy
 from scripts.open_meteo import fetch_marine
 from scripts.storage import save_forecasts_merged, update_region_beach_ids_list
 from scripts.beach_registry import load_locations
+from scripts.alerts import send_telegram_alert
 from cleanup_old_forecasts import cleanup_old_forecasts
 
 # 설정 로드
@@ -185,13 +186,35 @@ def run_collection():
 
     # 7일 이전 데이터 자동 삭제
     cleanup_result = None
+    cleanup_error = None
     print("\n🧹 7일 이전 오래된 데이터 정리 중...")
     try:
         cleanup_result = cleanup_old_forecasts(days=7, dry_run=False, confirm=False)
         deleted_docs = cleanup_result.get("deleted_documents", 0) if cleanup_result else 0
         print(f"🧹 정리 완료: {deleted_docs}개 문서 삭제")
     except Exception as e:
-        print(f"⚠️ 데이터 정리 실패 (수집 결과에는 영향 없음): {e}")
+        cleanup_error = str(e)
+        print(f"⚠️ 데이터 정리 실패 (수집 결과에는 영향 없음): {cleanup_error}")
+
+    # 문제 발생 시 Telegram 알림 (환경변수 설정 시)
+    alert_messages = []
+    if failed_updates > 0:
+        alert_messages.append(
+            f"수집 실패 해변 {failed_updates}개 발생 (전체 {len(locations)}개 중)"
+        )
+    if cleanup_error:
+        alert_messages.append(f"자동 정리(cleanup) 실패: {cleanup_error}")
+
+    if alert_messages:
+        alert_result = send_telegram_alert(
+            message="\n".join(alert_messages),
+            level="WARNING",
+            source="run_collection",
+        )
+        if alert_result.get("sent"):
+            print("📩 Telegram 장애 알림 전송 완료")
+        else:
+            print(f"ℹ️ Telegram 알림 미전송: {alert_result.get('reason')}")
 
     return {
         "total": len(locations),
