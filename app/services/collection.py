@@ -11,11 +11,17 @@ from cleanup_old_forecasts import cleanup_old_forecasts
 from scripts.beach_registry import load_locations
 from scripts.forecast_api import fetch_items_with_fallback, latlon_to_xy
 from scripts.open_meteo import fetch_marine
-from scripts.storage import save_forecasts_merged, update_region_beach_ids_list
+from scripts.storage import (
+    save_forecasts_merged,
+    update_global_beaches_list,
+    update_region_beach_ids_list,
+)
 
 
 def update_region_metadata(locations):
     """각 지역의 해변 ID 목록을 메타데이터로 저장"""
+    update_global_beaches_list(locations)
+
     region_beaches = {}
 
     for loc in locations:
