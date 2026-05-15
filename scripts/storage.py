@@ -250,7 +250,7 @@ def update_global_beaches_list(all_beaches):
                 "region": beach["region"],
                 "region_name": beach["region_name"],
                 "region_order": beach["region_order"],
-                "place": beach["display_name"],
+                "display_name": beach["display_name"],
                 "lat": beach["lat"],
                 "lon": beach["lon"]
             })
