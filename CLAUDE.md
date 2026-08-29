@@ -43,7 +43,9 @@ scripts/
   cache_utils.py        메모리 캐시
   firebase_utils.py     Firestore 클라이언트 (지연 초기화)
   locations.json        해변 32곳 정의
-  model_compare.py      파랑 모델을 Windfinder와 대조하는 도구
+  windfinder.py         Windfinder 예보 페이지에서 파고·파주기 수집 (검증용)
+  model_compare.py      파랑 모델을 Windfinder와 대조 — 편향/모양 분리
+  compare_period.py     iOS 파주기 추정식이 실제와 얼마나 다른지 측정
 config.json          ← 수집 주기·모델 선택 등 런타임 설정
 ```
 
@@ -62,6 +64,119 @@ Firestore 경로: `regions/{region}/{beach_id}/{YYYYMMDDHHMM}`
 | `TELEGRAM_*` | 장애 알림용 (`app/clients/alerts.py`) |
 
 `private/`와 `secrets/`는 `.gitignore` 대상이라 저장소에 없다.
+
+### 로컬 준비 (한 번만)
+
+**의존성은 `.venv`에 깐다.** 시스템 python으로는 `firebase_admin` import가 실패한다 —
+"모듈이 없어서 Firestore를 못 쓴다"고 결론내기 전에 `.venv/bin/python3`로 실행했는지 볼 것.
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+이후 모든 실행은 `.venv/bin/python3` 로 한다. `-m scripts.xxx` 형태를 쓰면
+`scripts` 패키지 import가 맞는다.
+
+**자격증명 두 개**는 iCloud 인계 폴더에 있다 (`~/Library/Mobile Documents/com~apple~CloudDocs/DoSurf-API 인계 자료/`).
+
+```sh
+# Firebase 서비스계정 키 — 이 경로에 두면 firebase_utils 가 자동으로 찾는다
+mkdir -p private/keys
+cp "<인계폴더>/serviceAccountKey.json" private/keys/serviceAccountKey.json
+chmod 600 private/keys/serviceAccountKey.json
+
+# 기상청 키 — 인계폴더 secrets.json 의 API_KEY
+export KMA_API_KEY=$(python3 -c "import json;print(json.load(open('<인계폴더>/secrets.json'))['API_KEY'])")
+```
+
+### 확인된 사실 (2026-08-30 실측)
+
+문서만 보고 추측하지 말라고 적어둔다. 아래는 실제로 돌려서 확인한 것이다.
+
+- **기상청 단기예보에 수온(`TW`)이 없다.** 죽도 907건 응답의 카테고리는
+  `PCP POP PTY REH SKY SNO TMN TMP TMX UUU VEC VVV WAV WSD` 14종뿐이다.
+  수온은 Open-Meteo에서만 온다. 부이 관측(`kma_buoy.php`)은 별개 API이고
+  `getWaveBuoyLstTbl`은 관측값이 아니라 **파고부이 지점 좌표 목록**이다.
+- **기상청 파고(`WAV`)는 사실상 상수다.** 해변 32곳 전부 100% 채워지지만 값이
+  지역별로 `0` 또는 `0.5`에 고정이다. 5km 육상 격자라 해양 파랑모델이 아니다.
+  그래서 iOS는 파고를 Open-Meteo 우선으로 읽는다.
+- **Open-Meteo 이중 호출이 실제로 동작한다.** 지역 모델로 파고를 받고,
+  `models` 지정 시 빠지는 수온·조석을 폴백 모델로 한 번 더 채운다.
+  결과에 `marine_source.fallback_fields: ['sea_surface_temperature', 'sea_level_height_msl']`
+  가 남는다.
+- **Firestore 쓰기까지 검증됐다.** `wave.period_s`, `tide`, `marine_source`가
+  실제 문서에 기록되는 것을 확인했다.
+
+### 수집을 지금 한 번 돌리려면
+
+스케줄러(정시+15분, 3시간 간격)를 기다릴 필요 없다. 배포된 서비스에 직접 친다.
+**배포된 리비전으로 도는 것**이라 배포 검증도 겸한다.
+
+```sh
+TOKEN=$(gcloud secrets versions access latest --secret=dosurf-collect-job-token)
+curl -sS -X POST https://do-surf-functions-900402500777.asia-northeast3.run.app/ \
+  -H "X-Job-Token: $TOKEN"
+```
+
+응답의 `partial: 32 / success: 0`은 **정상이다.** 기상청은 3일치만 주는데
+Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 걸린다.
+실패는 `failed` 값으로 판단할 것.
+
+### 자격증명 없이 되는 것
+
+`scripts/open_meteo.py`는 인증이 필요 없다. Windfinder 대조 도구
+(`scripts/model_compare.py`, `scripts/windfinder.py`)도 Firestore를 쓰지 않는
+경로가 있다. Firestore 조회가 필요한 `scripts/compare_period.py`만 키가 필요하다.
+
+---
+
+## 검증 도구 사용법
+
+### 모델이 Windfinder와 얼마나 맞는지
+
+```sh
+.venv/bin/python3 -m scripts.model_compare --spot sokcho --from-windfinder \
+  --out data/model_compare.jsonl
+```
+
+`--from-windfinder` 가 예보 페이지에서 파고·파주기를 직접 읽어 넣는다.
+지점은 `sokcho`, `jeju` 두 곳이 정의돼 있다(`REFERENCE_SPOTS`).
+`--out` 으로 누적해야 여러 날 비교가 쌓인다.
+
+**출력 읽는 법 — MAE만 보면 안 된다.** MAE는 성격이 다른 둘을 한 숫자에 섞는다.
+
+| 열 | 뜻 | 고치는 방법 |
+|---|---|---|
+| 편향 | 이 지점에서 늘 얼마나 높게/낮게 나오는가 | 상수를 더한다 (보정계수) |
+| 편향제거 MAE | 편향을 뺀 뒤 남는 오차 = 진짜 모양 오차 | 모델을 바꾼다 |
+| 상관계수 | 오르내리는 흐름이 같은가 | 1에 가까우면 경향성 일치 |
+
+모델은 **편향제거 MAE와 상관계수로 고르고**, 남은 편향은 보정계수로 처리한다.
+2026-08-30 속초에서 전 모델 상관이 0.98을 넘었다 — 흐름은 이미 맞고 차이는
+대부분 편향이었다.
+
+기준값이 하루 종일 같으면(제주에서 실제로 있었다) 상관계수가 정의되지 않아
+`-` 로 나온다. 그런 날은 경향성 판단이 불가능하니 다시 재야 한다.
+
+> ⚠️ **이 대조는 독립 검증이 아니다.** Windfinder는 WW3(NOAA)를 쓰고
+> Open-Meteo의 `ncep_gfswave*` 도 같은 소스다. 높은 일치도가 곧 정확도는 아니다.
+> 자세한 건 `docs/marine-data-audit.md` 「기준을 Windfinder로」.
+
+### iOS 파주기 추정식이 얼마나 틀리는지
+
+```sh
+.venv/bin/python3 -m scripts.compare_period          # 기본 5개 지역
+.venv/bin/python3 -m scripts.compare_period 1001 3001 # beach_id 지정
+```
+
+Firestore의 기상청 풍속(iOS가 실제로 쓰는 값)으로 추정식을 재현해 Open-Meteo
+실제 파주기와 맞대본다. Firestore 조회가 필요하므로 서비스계정 키가 있어야 한다.
+
+### 보정계수를 넣을 때
+
+**하루치로 상수를 박지 말 것.** 예전에 제거한 `+0.5` 보정이 그렇게 들어왔다.
+여러 날 `data/model_compare.jsonl` 을 쌓아 편향 평균을 구한 뒤에 넣는다.
 
 ### ⚠️ 수집을 돌리면 데이터가 지워진다
 
