@@ -15,6 +15,11 @@
   python scripts/model_compare.py --spot jeju \
       --reference 1.0,0.9,0.8,0.8,0.8,0.8,0.8,0.8
 
+  # 파주기까지 함께 (파고와 따로 순위가 나오고, 1위가 갈리면 경고한다)
+  python scripts/model_compare.py --spot jeju \
+      --reference 1.0,0.9,0.8,0.8,0.8,0.8,0.8,0.8 \
+      --reference-period 10,10,11,11,10,10,9,9
+
   # 결과를 누적 저장 (JSON Lines)
   python scripts/model_compare.py --spot sokcho --reference ... \
       --out data/model_compare.jsonl
@@ -24,6 +29,10 @@
 
 Windfinder 값은 자동으로 못 가져온다. windfinder.com/forecast/<spot>에서
 해당 날짜의 wave height를 00,03,06,09,12,15,18,21시 순서로 읽어 --reference에 넣을 것.
+파주기(period)도 같은 시각 순서로 읽어 --reference-period에 넣는다.
+
+파고와 파주기는 순위를 따로 매긴다. 파고로 고른 모델이 파주기까지 맞는다는
+보장이 없기 때문이다 (docs/marine-data-audit.md). 1위가 갈리면 그렇다고 알린다.
 """
 import argparse
 import datetime
@@ -111,6 +120,9 @@ def main():
     ap.add_argument("--date", default=datetime.date.today().isoformat(),
                     help="조회 날짜 (기본: 오늘). 과거 날짜는 재분석 값이 섞이므로 당일 권장")
     ap.add_argument("--reference", help="Windfinder 파고 8개 값 (00,03,...,21시), 쉼표 구분")
+    ap.add_argument("--reference-period",
+                    help="Windfinder 파주기 8개 값 (00,03,...,21시), 쉼표 구분. "
+                         "파고와 따로 순위를 매긴다")
     ap.add_argument("--models", help="비교할 모델 목록 (쉼표 구분). 기본: 후보 전체")
     ap.add_argument("--out", help="결과를 이 파일에 JSON Lines로 append")
     args = ap.parse_args()
@@ -123,24 +135,32 @@ def main():
     else:
         ap.error("--spot 또는 --lat/--lon 중 하나가 필요합니다")
 
-    reference = None
-    if args.reference:
+    def parse_reference(raw, flag):
+        if not raw:
+            return None
         try:
-            reference = [float(v) for v in args.reference.split(",")]
+            values = [float(v) for v in raw.split(",")]
         except ValueError:
-            ap.error("--reference 는 숫자 8개를 쉼표로 구분해 주세요")
-        if len(reference) != len(HOURS):
-            ap.error(f"--reference 는 값이 {len(HOURS)}개여야 합니다 (00,03,...,21시)")
+            ap.error(f"{flag} 는 숫자 {len(HOURS)}개를 쉼표로 구분해 주세요")
+        if len(values) != len(HOURS):
+            ap.error(f"{flag} 는 값이 {len(HOURS)}개여야 합니다 (00,03,...,21시)")
+        return values
+
+    reference = parse_reference(args.reference, "--reference")
+    reference_period = parse_reference(args.reference_period, "--reference-period")
 
     models = args.models.split(",") if args.models else CANDIDATE_MODELS
 
     print(f"\n지점: {label} ({lat}, {lon})   날짜: {args.date}")
     if reference:
-        print(f"Windfinder: {reference}")
+        print(f"Windfinder 파고  : {reference}")
+    if reference_period:
+        print(f"Windfinder 파주기: {reference_period}")
     print()
-    header = f"{'모델':<20}{'격자거리':>9}{'MAE':>9}  파고 시계열"
+    header = (f"{'모델':<20}{'격자거리':>9}{'MAE파고':>9}{'MAE주기':>9}"
+              f"  파고 / 주기 시계열")
     print(header)
-    print("-" * max(len(header), 84))
+    print("-" * max(len(header), 96))
 
     results = []
     for model in models:
@@ -167,20 +187,54 @@ def main():
         if reference:
             mae = sum(abs(a - b) for a, b in zip(heights, reference)) / len(HOURS)
 
+        # 파주기는 모델이 결측을 주는 시각이 있어 짝이 맞는 것만 센다
+        mae_period = None
+        if reference_period:
+            pairs = [(p, r) for p, r in zip(periods, reference_period) if p is not None]
+            if pairs:
+                mae_period = sum(abs(p - r) for p, r in pairs) / len(pairs)
+
         results.append({
-            "model": model, "mae": mae, "snap_km": round(dist, 1),
+            "model": model, "mae": mae, "mae_period": mae_period,
+            "snap_km": round(dist, 1),
             "heights": heights, "periods": periods,
             "grid": [data["latitude"], data["longitude"]],
         })
         mae_txt = f"{mae:>9.3f}" if mae is not None else f"{'-':>9}"
-        print(f"{model:<20}{dist:>8.1f}k{mae_txt}  {[round(v, 2) for v in heights]}")
+        mae_p_txt = f"{mae_period:>9.2f}" if mae_period is not None else f"{'-':>9}"
+        period_txt = [round(v, 1) if v is not None else None for v in periods]
+        print(f"{model:<20}{dist:>8.1f}k{mae_txt}{mae_p_txt}  "
+              f"{[round(v, 2) for v in heights]} / {period_txt}")
 
-    if reference and results:
-        ranked = sorted([r for r in results if r["mae"] is not None],
-                        key=lambda r: r["mae"])
-        print(f"\n=== {label} {args.date} 순위 ===")
+    def ranking(key, unit):
+        ranked = sorted([r for r in results if r.get(key) is not None],
+                        key=lambda r: r[key])
         for i, r in enumerate(ranked, 1):
-            print(f"  {i}. {r['mae']:.3f}  {r['model']}")
+            print(f"  {i}. {r[key]:.3f}{unit}  {r['model']}")
+        return ranked
+
+    if results and (reference or reference_period):
+        print(f"\n=== {label} {args.date} 순위 ===")
+
+        best_h = best_p = None
+        if reference:
+            print("\n[파고 기준]")
+            ranked_h = ranking("mae", "m")
+            best_h = ranked_h[0]["model"] if ranked_h else None
+        if reference_period:
+            print("\n[파주기 기준]")
+            ranked_p = ranking("mae_period", "s")
+            best_p = ranked_p[0]["model"] if ranked_p else None
+
+        # 열린 질문: 파고로 고른 모델이 파주기까지 맞는가 (docs/marine-data-audit.md)
+        if best_h and best_p:
+            if best_h == best_p:
+                print(f"\n두 기준의 1위가 같다: {best_h}")
+            else:
+                print(f"\n⚠️ 1위가 갈린다 — 파고 {best_h} / 파주기 {best_p}")
+                print("   한 모델로 둘 다 만족시킬 수 없다는 뜻이므로,")
+                print("   파주기를 화면에 노출하기 전에 표본을 더 쌓을 것.")
+
         if args.spot:
             regions = ", ".join(REFERENCE_SPOTS[args.spot]["regions"])
             print(f"\n이 지점이 대표하는 지역: {regions}")
@@ -190,7 +244,8 @@ def main():
         os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
         record = {
             "label": label, "lat": lat, "lon": lon, "date": args.date,
-            "reference": reference, "results": results,
+            "reference": reference, "reference_period": reference_period,
+            "results": results,
             "recorded_at": datetime.datetime.now().isoformat(timespec="seconds"),
         }
         with open(args.out, "a", encoding="utf-8") as f:
