@@ -11,6 +11,7 @@ from cleanup_old_forecasts import cleanup_old_forecasts
 from scripts.beach_registry import load_locations
 from scripts.forecast_api import fetch_items_with_fallback, latlon_to_xy
 from scripts.open_meteo import fetch_marine
+from scripts.timeutil import kst_naive_now
 from scripts.storage import (
     save_forecasts_merged,
     update_global_beaches_list,
@@ -57,7 +58,10 @@ def run_collection():
     - 명확한 로그 메시지
     """
     locations = load_locations()
-    end_dt = datetime.datetime.now() + datetime.timedelta(days=FORECAST_DAYS)
+    # KMA fcstDate/Time과 Open-Meteo om_datetime은 둘 다 naive KST다.
+    # Cloud Run은 UTC로 돌기 때문에 datetime.now()를 그대로 쓰면
+    # 예보 범위가 9시간 짧게 잘린다.
+    end_dt = kst_naive_now() + datetime.timedelta(days=FORECAST_DAYS)
 
     print("🗂️  지역별 해변 ID 메타데이터 업데이트 중...")
     update_region_metadata(locations)
@@ -78,6 +82,7 @@ def run_collection():
         forecast_count = 0
         picked = []
         marine = []
+        marine_meta = None
 
         try:
             # --- 1. KMA (기상청 단기예보) ---
@@ -122,11 +127,14 @@ def run_collection():
 
             # --- 2. Open-Meteo API ---
             try:
-                marine = fetch_marine(float(loc["lat"]), float(loc["lon"]), timezone="Asia/Seoul", forecast_days=5)
+                marine, marine_meta = fetch_marine(
+                    float(loc["lat"]), float(loc["lon"]),
+                    timezone="Asia/Seoul", forecast_days=5, region=loc["region"])
                 marine = [m for m in marine if datetime.datetime.fromisoformat(m["om_datetime"]) <= end_dt]
 
                 if marine:
-                    print(f"   🌊 Open-Meteo: {len(marine)}개 해양 예보")
+                    print(f"   🌊 Open-Meteo({marine_meta['model']}): {len(marine)}개 해양 예보"
+                          f" · 격자 {marine_meta['snap_distance_km']}km")
                     has_marine = True
                 else:
                     print("   ⚠️ Open-Meteo 데이터 없음")
@@ -135,7 +143,8 @@ def run_collection():
 
             # --- 3. 결과 병합 & 저장 ---
             if has_kma or has_marine:
-                save_forecasts_merged(loc["region"], loc["beach"], beach_id, picked, marine)
+                save_forecasts_merged(loc["region"], loc["beach"], beach_id,
+                                      picked, marine, marine_meta)
 
                 if has_kma and has_marine:
                     # KMA 데이터 완전성에 따라 분류

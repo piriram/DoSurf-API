@@ -8,13 +8,11 @@ from .beach_registry import (
     load_locations,
 )
 from . import cache_utils  # 캐싱 레이어
-from .config import get_allowed_hours, get_wave_height_offset
+from .config import get_allowed_hours
 from .path_utils import sanitize_firestore_id
 
 # 3시간 간격 저장 시간 (0, 3, 6, 9, 12, 15, 18, 21시)
 ALLOWED_HOURS = set(get_allowed_hours())
-# Open-Meteo 파고 보정값(기본 0.5m): config.json(storage.wave_height_offset)에서 조정 가능.
-WAVE_HEIGHT_OFFSET = float(get_wave_height_offset())
 
 # 한국 시간대 설정
 KST = ZoneInfo("Asia/Seoul")
@@ -27,15 +25,18 @@ def get_kst_now():
 def _sanitize_id(value):
     return sanitize_firestore_id(value)
 
-def save_forecasts_merged(region, beach, beach_id, picked, marine):
+def save_forecasts_merged(region, beach, beach_id, picked, marine, marine_meta=None):
     """
     기상청(KMA) 예보 데이터 + Open-Meteo 데이터를 병합해서 Firestore에 저장.
 
     - Beach ID를 컬렉션 이름으로 사용
-    - 발표시각(02,05,08,11,14,17,20,23) 데이터만 허용
-    - 같은 시각의 KMA 데이터에 Open-Meteo 보조 데이터(wave, 수온)를 합침
+    - ALLOWED_HOURS(0,3,6,...,21시) 예보 시각만 저장
+    - 같은 시각의 KMA 데이터에 Open-Meteo 해양 데이터를 합침
     - Firestore에 merge=True 옵션으로 저장 (기존 필드 유지)
     - 저장 완료 후 해변별 메타데이터 업데이트
+
+    marine_meta: fetch_marine()이 돌려준 출처 정보(모델·격자 좌표·수집 시각).
+                 어느 모델을 썼는지 나중에 추적하려면 필요하다.
     """
     time_groups = {}
 
@@ -129,13 +130,48 @@ def save_forecasts_merged(region, beach, beach_id, picked, marine):
                 "datetime": dt_str
             }
         
-        # Open-Meteo 데이터 추가
-        raw_wave_height = r.get("om_wave_height")
-        time_groups[dt_str]["om_wave_height"] = (
-            (float(raw_wave_height) if raw_wave_height is not None else 0.0) + WAVE_HEIGHT_OFFSET
-        )
-        time_groups[dt_str]["om_wave_direction"] = r.get("om_wave_direction")
-        time_groups[dt_str]["om_sea_surface_temperature"] = r.get("om_sea_surface_temperature")
+        group = time_groups[dt_str]
+
+        # --- 기존 평면 필드 (iOS 클라이언트 호환용) ---
+        # 과거에는 여기서 파고에 +0.5m를 더했다. 유료 모델을 못 쓴다고 보고 넣은 값이었는데
+        # 실제로는 전 모델이 무료였고, 제주에서만 우연히 맞고 동해에서는 크게 틀렸다.
+        # 결측은 0.0이 아니라 None으로 남긴다 — 데이터 없음과 파도 0m는 다르다.
+        # docs/marine-data-plan.md 참조.
+        group["om_wave_height"] = r.get("wave_height")
+        group["om_wave_direction"] = r.get("wave_direction")
+        group["om_sea_surface_temperature"] = r.get("sea_surface_temperature")
+
+        # --- 통합 스키마 (Phase 2에서 앱이 읽을 필드. 지금은 저장만) ---
+        group["wave"] = {
+            "height_m": r.get("wave_height"),
+            "period_s": r.get("wave_period"),
+            "direction_deg": r.get("wave_direction"),
+            "swell": {
+                "height_m": r.get("swell_wave_height"),
+                "period_s": r.get("swell_wave_period"),
+                "direction_deg": r.get("swell_wave_direction"),
+            },
+            "wind_wave": {
+                "height_m": r.get("wind_wave_height"),
+                "period_s": r.get("wind_wave_period"),
+                "direction_deg": r.get("wind_wave_direction"),
+            },
+            "source": marine_meta.get("model") if marine_meta else None,
+        }
+        group["tide"] = {"height_m": r.get("sea_level_height_msl")}
+
+        if marine_meta:
+            group["marine_source"] = {
+                "model": marine_meta.get("model"),
+                "grid_lat": marine_meta.get("grid_lat"),
+                "grid_lon": marine_meta.get("grid_lon"),
+                "snap_distance_km": marine_meta.get("snap_distance_km"),
+                "fetched_at": marine_meta.get("fetched_at"),
+                # 지역 모델이 주지 않아 폴백 모델에서 채운 필드.
+                # 값이 있으면 그 필드는 wave.source와 다른 모델에서 온 것이다.
+                "fallback_model": marine_meta.get("fallback_model"),
+                "fallback_fields": marine_meta.get("fallback_fields") or [],
+            }
 
     # -------------------------
     # 3) Firestore에 배치 저장

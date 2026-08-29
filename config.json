@@ -10,12 +10,51 @@
     "forecast_days": 3
   },
   "storage": {
-    "allowed_hours": [0, 3, 6, 9, 12, 15, 18, 21],
-    "wave_height_offset": 0.5
+    "allowed_hours": [
+      0,
+      3,
+      6,
+      9,
+      12,
+      15,
+      18,
+      21
+    ]
   },
   "notes": {
     "schedule_comment": "Firebase Functions는 02:15, 05:15, 08:15, 11:15, 14:15, 17:15, 20:15, 23:15에 실행됩니다",
     "kma_retry_comment": "API 제공 시간(정시+10분) 이후 5분에 실행하므로 재시도는 최소화(2회)",
-    "forecast_days_comment": "단기예보는 3일치까지 공식 제공됩니다"
+    "forecast_days_comment": "단기예보는 3일치까지 공식 제공됩니다",
+    "wave_height_offset_removed": "파고에 +0.5m를 더하던 보정을 제거했습니다(2026-08). 유료 모델을 못 쓴다고 보고 넣은 값이었는데 실제로는 전 모델이 무료였습니다. 제주에서만 우연히 맞고 동해에서는 크게 틀렸습니다. 다시 넣지 마세요 — docs/marine-data-plan.md",
+    "marine_model_comment": "지역별로 Windfinder에 가장 가까운 파랑 모델이 다릅니다. 근거는 docs/marine-data-audit.md",
+    "marine_model_verified": "동해(속초 대표) ncep_gfswave016 — 2026-08-26/28/29 Windfinder 대조 3일 평균 MAE 0.073으로 1위",
+    "marine_model_inferred": "yangyang/gangneung/pohang은 같은 동해 해역이라 속초 결과를 적용한 추정값",
+    "marine_model_pending": "jeju는 3일간 1위 모델이 매일 바뀌어 보류했습니다(default 사용). busan/west_south는 대조 데이터가 없습니다. scripts/model_compare.py로 축적 후 결정",
+    "marine_fallback_comment": "models를 지정하면 Open-Meteo가 수온·조석을 응답에서 뺍니다. 그래서 fallback_model로 한 번 더 호출해 채우고, 폴백에서 온 필드는 marine_source.fallback_fields에 기록합니다"
+  },
+  "marine": {
+    "default_model": "best_match",
+    "fallback_model": "best_match",
+    "region_models": {
+      "yangyang": "ncep_gfswave016",
+      "gangneung": "ncep_gfswave016",
+      "sokcho": "ncep_gfswave016",
+      "pohang": "ncep_gfswave016"
+    },
+    "wave_variables": [
+      "wave_height",
+      "wave_direction",
+      "wave_period",
+      "swell_wave_height",
+      "swell_wave_direction",
+      "swell_wave_period",
+      "wind_wave_height",
+      "wind_wave_direction",
+      "wind_wave_period"
+    ],
+    "aux_variables": [
+      "sea_surface_temperature",
+      "sea_level_height_msl"
+    ]
   }
 }
