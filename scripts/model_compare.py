@@ -123,6 +123,10 @@ def main():
     ap.add_argument("--reference-period",
                     help="Windfinder 파주기 8개 값 (00,03,...,21시), 쉼표 구분. "
                          "파고와 따로 순위를 매긴다")
+    ap.add_argument("--from-windfinder", metavar="SPOT", nargs="?", const=True,
+                    help="Windfinder 예보 페이지에서 파고·파주기를 직접 읽어온다. "
+                         "값을 생략하면 --spot 이름을 그대로 쓴다. "
+                         "--reference / --reference-period 를 주면 그쪽이 우선한다")
     ap.add_argument("--models", help="비교할 모델 목록 (쉼표 구분). 기본: 후보 전체")
     ap.add_argument("--out", help="결과를 이 파일에 JSON Lines로 append")
     args = ap.parse_args()
@@ -148,6 +152,26 @@ def main():
 
     reference = parse_reference(args.reference, "--reference")
     reference_period = parse_reference(args.reference_period, "--reference-period")
+
+    if args.from_windfinder:
+        wf_spot = args.from_windfinder if isinstance(args.from_windfinder, str) else args.spot
+        if not wf_spot:
+            ap.error("--from-windfinder 에 지점 이름을 주거나 --spot 을 함께 쓰세요")
+        # 직접 준 값이 있으면 그쪽을 존중한다
+        if reference and reference_period:
+            print(f"(--reference 와 --reference-period 가 모두 있어 Windfinder 수집을 건너뜁니다)")
+        else:
+            from scripts.windfinder import reference_series
+            try:
+                label_wf, heights_wf, periods_wf, cached = reference_series(wf_spot)
+            except Exception as exc:
+                ap.error(f"Windfinder 수집 실패: {exc}")
+            src = "캐시" if cached else "수집"
+            print(f"Windfinder({wf_spot}) {label_wf} — {src}")
+            if reference is None and all(v is not None for v in heights_wf):
+                reference = heights_wf
+            if reference_period is None and all(v is not None for v in periods_wf):
+                reference_period = periods_wf
 
     models = args.models.split(",") if args.models else CANDIDATE_MODELS
 
