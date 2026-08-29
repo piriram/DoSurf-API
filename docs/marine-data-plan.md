@@ -1,5 +1,99 @@
 # 해상 데이터 정확도 개선 — 이 저장소 기준 재검토
 
+> ## 다음 세션은 여기부터
+>
+> **Phase 1 구현은 끝났고 배포 전이다.** 브랜치 `claude/marine-data-accuracy`.
+> 원격 세션에는 `KMA_API_KEY`와 Firebase 자격증명이 없어서 **기상청 경로와
+> Firestore 쓰기를 한 번도 검증하지 못했다.** 자격증명이 있는 환경이라면 아래 셋을 먼저 하면 된다.
+
+### ⚠️ 먼저 알아둘 것 — 수집을 돌리면 데이터가 지워진다
+
+`run_collection()`은 수집이 끝난 뒤 **7일 지난 예보 문서를 삭제한다**
+(`app/services/collection.py:203` → `cleanup_old_forecasts(days=7, dry_run=False)`).
+
+운영 Firestore에 붙은 상태로 `python3 main.py`를 돌리면 **실제로 삭제가 일어난다.**
+확인만 하려면 아래 1·2번처럼 수집 함수를 건드리지 않는 조회만 쓸 것.
+
+### 1. 기상청 발표시각 수정이 실제로 먹히는지
+
+Phase 1에서 고친 부분이다. KST 기준으로 최신 발표를 고르는지 본다.
+
+```sh
+KMA_API_KEY=<키> python3 -c "
+from scripts.forecast_api import pick_latest_basetime, fetch_items_with_fallback, latlon_to_xy
+from scripts.timeutil import kst_naive_now
+import datetime
+print('KST 현재  ', kst_naive_now().strftime('%Y-%m-%d %H:%M'))
+print('UTC 현재  ', datetime.datetime.now().strftime('%Y-%m-%d %H:%M'))
+print('고른 발표 ', pick_latest_basetime())
+nx, ny = latlon_to_xy(37.9723, 128.7595)
+items, d, t = fetch_items_with_fallback(nx, ny)
+print('실제 사용 ', d, t, '| items', len(items) if items else 0)
+"
+```
+
+**기대**: `고른 발표`가 현재 KST 시각 직전의 발표시각(02·05·08·11·14·17·20·23)이어야 한다.
+`실제 사용`이 그보다 뒤로 밀렸다면 그 발표가 아직 안 올라온 것이므로 폴백이 정상 동작한 것이다.
+
+### 2. 기상청 `WAV`(파고)가 얼마나 채워지는지 ← 가장 중요
+
+**이 답에 따라 Phase 1의 사용자 체감 효과가 갈린다.**
+iOS는 파고를 `wave_height`(기상청) 우선으로 읽는데(`ios-migration.md` P0),
+Phase 1에서 개선한 것은 `om_wave_height`(Open-Meteo) 쪽이다.
+
+```sh
+KMA_API_KEY=<키> python3 -c "
+import json, collections
+from scripts.forecast_api import fetch_items_with_fallback, latlon_to_xy
+locs = json.load(open('scripts/locations.json'))
+for l in locs:
+    nx, ny = latlon_to_xy(l['lat'], l['lon'])
+    items, *_ = fetch_items_with_fallback(nx, ny)
+    c = collections.Counter(i['category'] for i in (items or []))
+    print(f\"{l['display_name']:<14} WAV {c.get('WAV',0):>4} / 전체 {sum(c.values()):>5}\")
+"
+```
+
+- **WAV가 대부분 채워진다** → 앱 파고는 기상청 값이 뜬다.
+  Open-Meteo 개선이 화면에 안 나타나므로 `ios-migration.md` **P0(우선순위 뒤집기)가 급해진다.**
+- **WAV가 거의 없다** → 이미 `om_wave_height`가 쓰이고 있으므로 Phase 1 효과가 바로 나타난다.
+
+Firestore 콘솔에서 아무 해변 문서 몇 개를 열어 `wave_height` 필드 유무만 봐도 같은 답이 나온다.
+
+### 3. 수집 1회 실행 (Firestore 쓰기 검증)
+
+**위 경고를 읽고 나서** 돌릴 것. 스테이징이 있으면 거기서 하는 편이 안전하다.
+
+```sh
+KMA_API_KEY=<키> python3 main.py
+```
+
+확인할 것:
+- 로그에 `Open-Meteo(ncep_gfswave016) … 격자 N km` 가 동해 해변에서 보이는지
+- 제주·부산은 `best_match`로 나오는지 (보류 결정대로)
+- Firestore 문서에 `wave`·`tide`·`marine_source`가 생겼는지
+- `om_wave_height`가 이전보다 **0.5 작아졌는지** (보정 제거 확인)
+- `merge=True`가 중첩 맵(`wave.swell` 등)에서 의도대로 동작하는지
+
+배포는 [`DEPLOYMENT.md`](./DEPLOYMENT.md) 참조 (Cloud Run, 프로젝트 `dosurf-api`, 서비스 `do-surf-functions`).
+
+---
+
+## 지금까지의 결정 (재론 불필요)
+
+| # | 주제 | 결정 | 근거 |
+|---|---|---|---|
+| 1 | 파고 `+0.5` 보정 | **제거.** `config.json` 키와 접근자도 삭제 | 유료 모델 회피용이었는데 Open-Meteo는 전 모델 무료(비상업). 제주에서만 우연히 맞음 |
+| 1 | 결측 파고 | **`None` 저장** (0.0 아님) | 데이터 없음과 파도 0m는 다르다. 화면 0.0m 문제는 iOS에서 풀 것 |
+| 2 | 시간대 | **두 곳 다 KST로**, 한 번에 배포 | 원인이 같고 둘 다 명백한 버그 |
+| 3 | 동해 모델 | **`ncep_gfswave016`** | 3일 평균 MAE 0.073으로 1위 |
+| 3 | 제주 모델 | **보류** (`best_match`) | 3일간 1위가 매일 바뀜. `+0.5` 제거만으로도 개선 |
+| 3 | 부산·서해남해 | **보류** | 대조 데이터 없음 |
+| — | 검증 기준 | **Windfinder** (부이 아님) | 강원 북부에 부이 없음, ±0.5m 정확도. 사용자는 Windfinder와 비교한다 |
+| — | 좌표 수동 지정 | **폐기** | 0~20km 옮겨도 같은 격자로 스냅됨(실측 반증) |
+| — | 라이선스 | 무료 티어 유지 | **비상업 용도 확인됨.** CC BY 4.0 출처 표기 의무는 남음 |
+
+
 조사는 `piriram/do-surf-functions`에서 진행했다. 그 저장소가 현행이 아니라는 것을
 뒤늦게 확인해서, **모든 발견을 이 저장소의 실제 코드에 다시 대조했다.**
 
