@@ -5,6 +5,8 @@ import math
 import datetime
 import requests
 
+from .timeutil import kst_naive_now
+
 try:
     from .config import get_kma_retry_count, get_kma_retry_delay
     CONFIG_AVAILABLE = True
@@ -61,7 +63,9 @@ def latlon_to_xy(lat, lon):
 
 def pick_latest_basetime(now=None):
     if now is None:
-        now = datetime.datetime.now()
+        # 발표시각(02,05,...,23)은 KST 기준이다. 컨테이너는 UTC라
+        # datetime.now()를 쓰면 매번 한 단계 전 발표를 요청하게 된다.
+        now = kst_naive_now()
     hour = now.hour
     for h in BASE_TIMES:
         if hour >= h:

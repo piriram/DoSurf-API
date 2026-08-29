@@ -18,3 +18,7 @@ private/*
 
 # Firebase local logs
 firebase-debug.log
+
+# Windfinder 예보 페이지 원본 캐시 — 남의 저작물이므로 공개 저장소에 올리지 않는다.
+# 재수집하면 되는 값이고, 검증 기록은 data/model_compare.jsonl 로 남는다.
+data/windfinder_cache/
