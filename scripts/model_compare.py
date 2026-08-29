@@ -33,6 +33,30 @@ Windfinder 값은 자동으로 못 가져온다. windfinder.com/forecast/<spot>�
 
 파고와 파주기는 순위를 따로 매긴다. 파고로 고른 모델이 파주기까지 맞는다는
 보장이 없기 때문이다 (docs/marine-data-audit.md). 1위가 갈리면 그렇다고 알린다.
+
+── MAE만 보면 안 되는 이유 ──
+
+MAE는 두 가지 다른 문제를 한 숫자에 섞는다.
+
+  편향(bias)  — 이 지점에서 늘 얼마나 높게/낮게 나오는가. 상수를 더해 고칠 수 있다
+  모양(shape) — 오르내리는 흐름이 Windfinder와 같은가. 모델을 바꿔야 고친다
+
+2026-08-30 속초 측정에서 전 모델의 상관계수가 0.98을 넘었다. 즉 흐름은 이미
+맞고, 차이는 대부분 편향이었다. gwam이 대표적이다 — MAE 0.235로 꼴찌였는데
+편향이 정확히 -0.235이고, 편향을 빼면 오차가 0.105로 줄었다. 틀린 게 아니라
+일정하게 낮게 나올 뿐이다.
+
+그래서 MAE 순위만 보고 모델을 바꾸면 편향을 모델 문제로 착각하게 된다.
+아래 네 값을 함께 본다.
+
+  MAE          기존 지표
+  편향          평균 부호오차. 클수록 보정계수(MOS)로 해결할 여지가 크다
+  편향제거 MAE   편향을 뺀 뒤 남는 오차. 이게 진짜 모양 오차다
+  상관계수       흐름 일치도. 1에 가까울수록 경향성이 같다
+
+**모델은 편향제거 MAE와 상관계수로 고르고, 남은 편향은 보정계수로 처리한다.**
+보정계수를 넣을 때는 반드시 여러 날 평균을 쓸 것 — 하루치로 상수를 박으면
+예전에 제거한 `+0.5` 보정의 재발이다.
 """
 import argparse
 import datetime
@@ -101,6 +125,43 @@ def series(hourly, name):
         if key.startswith(name + "_"):
             return hourly[key] or []
     return []
+
+
+def error_stats(predicted, reference):
+    """예보와 기준값의 오차를 편향과 모양으로 나눠 잰다.
+
+    반환: {mae, bias, mae_debiased, corr} — 짝이 맞는 값이 없으면 None.
+
+    bias는 평균 부호오차다. 이 지점에서 모델이 늘 얼마나 높게/낮게 나오는지를
+    뜻하고, 상수를 더해 고칠 수 있다. mae_debiased는 그 편향을 뺀 뒤 남는
+    오차이므로 모델 자체의 모양 오차에 가깝다.
+    """
+    pairs = [(p, r) for p, r in zip(predicted, reference)
+             if p is not None and r is not None]
+    if not pairs:
+        return None
+
+    errors = [p - r for p, r in pairs]
+    bias = sum(errors) / len(errors)
+
+    stats = {
+        "mae": sum(abs(e) for e in errors) / len(errors),
+        "bias": bias,
+        "mae_debiased": sum(abs(e - bias) for e in errors) / len(errors),
+        "corr": None,
+    }
+
+    # 기준값이 하루 종일 같은 값이면(제주에서 실제로 있었다) 상관계수가 정의되지
+    # 않는다. 그런 날은 경향성을 잴 수 없으므로 None으로 둔다.
+    preds = [p for p, _ in pairs]
+    refs = [r for _, r in pairs]
+    mp, mr = sum(preds) / len(preds), sum(refs) / len(refs)
+    dp = sum((x - mp) ** 2 for x in preds) ** 0.5
+    dr = sum((y - mr) ** 2 for y in refs) ** 0.5
+    if dp > 0 and dr > 0:
+        stats["corr"] = sum((x - mp) * (y - mr)
+                            for x, y in zip(preds, refs)) / (dp * dr)
+    return stats
 
 
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -181,10 +242,10 @@ def main():
     if reference_period:
         print(f"Windfinder 파주기: {reference_period}")
     print()
-    header = (f"{'모델':<20}{'격자거리':>9}{'MAE파고':>9}{'MAE주기':>9}"
-              f"  파고 / 주기 시계열")
+    header = (f"{'모델':<20}{'격자거리':>9}{'MAE':>9}{'편향':>9}"
+              f"{'편향제거':>9}{'상관':>9}{'MAE주기':>9}")
     print(header)
-    print("-" * max(len(header), 96))
+    print("-" * max(len(header), 84))
 
     results = []
     for model in models:
@@ -207,34 +268,43 @@ def main():
             continue
 
         dist = haversine_km(lat, lon, data["latitude"], data["longitude"])
-        mae = None
-        if reference:
-            mae = sum(abs(a - b) for a, b in zip(heights, reference)) / len(HOURS)
-
+        stats = error_stats(heights, reference) if reference else None
         # 파주기는 모델이 결측을 주는 시각이 있어 짝이 맞는 것만 센다
-        mae_period = None
-        if reference_period:
-            pairs = [(p, r) for p, r in zip(periods, reference_period) if p is not None]
-            if pairs:
-                mae_period = sum(abs(p - r) for p, r in pairs) / len(pairs)
+        stats_period = error_stats(periods, reference_period) if reference_period else None
 
         results.append({
-            "model": model, "mae": mae, "mae_period": mae_period,
+            "model": model,
+            "mae": stats["mae"] if stats else None,
+            "bias": stats["bias"] if stats else None,
+            "mae_debiased": stats["mae_debiased"] if stats else None,
+            "corr": stats["corr"] if stats else None,
+            "mae_period": stats_period["mae"] if stats_period else None,
+            "bias_period": stats_period["bias"] if stats_period else None,
+            "mae_period_debiased": stats_period["mae_debiased"] if stats_period else None,
+            "corr_period": stats_period["corr"] if stats_period else None,
             "snap_km": round(dist, 1),
             "heights": heights, "periods": periods,
             "grid": [data["latitude"], data["longitude"]],
         })
-        mae_txt = f"{mae:>9.3f}" if mae is not None else f"{'-':>9}"
-        mae_p_txt = f"{mae_period:>9.2f}" if mae_period is not None else f"{'-':>9}"
-        period_txt = [round(v, 1) if v is not None else None for v in periods]
-        print(f"{model:<20}{dist:>8.1f}k{mae_txt}{mae_p_txt}  "
-              f"{[round(v, 2) for v in heights]} / {period_txt}")
+
+        def cell(value, fmt="{:.3f}", width=9):
+            return (fmt.format(value) if value is not None else "-").rjust(width)
+
+        print(f"{model:<20}{dist:>8.1f}k"
+              f"{cell(stats['mae'] if stats else None)}"
+              f"{cell(stats['bias'] if stats else None, '{:+.3f}')}"
+              f"{cell(stats['mae_debiased'] if stats else None)}"
+              f"{cell(stats['corr'] if stats else None, '{:.4f}')}"
+              f"{cell(stats_period['mae'] if stats_period else None, '{:.2f}')}")
 
     def ranking(key, unit):
         ranked = sorted([r for r in results if r.get(key) is not None],
                         key=lambda r: r[key])
         for i, r in enumerate(ranked, 1):
-            print(f"  {i}. {r[key]:.3f}{unit}  {r['model']}")
+            extra = ""
+            if key == "mae_debiased" and r.get("bias") is not None:
+                extra = f"   (편향 {r['bias']:+.3f}{unit})"
+            print(f"  {i}. {r[key]:.3f}{unit}  {r['model']}{extra}")
         return ranked
 
     if results and (reference or reference_period):
@@ -242,12 +312,25 @@ def main():
 
         best_h = best_p = None
         if reference:
-            print("\n[파고 기준]")
-            ranked_h = ranking("mae", "m")
+            # 모델 선택은 편향을 뺀 오차로 한다. 편향은 보정계수로 따로 처리한다.
+            print("\n[파고 · 편향 제거 후 — 모델 선택 기준]")
+            ranked_h = ranking("mae_debiased", "m")
             best_h = ranked_h[0]["model"] if ranked_h else None
+
+            corr_rows = [r for r in results if r.get("corr") is not None]
+            if corr_rows:
+                worst = min(corr_rows, key=lambda r: r["corr"])
+                print(f"\n  상관계수 최저: {worst['corr']:.4f} ({worst['model']})")
+                if worst["corr"] >= 0.95:
+                    print("  → 전 모델이 Windfinder와 같은 흐름이다. 남은 차이는 대부분 편향이므로")
+                    print("     모델 교체보다 보정계수(MOS)가 답이다. 여러 날 평균으로 구할 것.")
+            else:
+                print("\n  ⚠️ 상관계수를 계산할 수 없다 — Windfinder 값이 하루 종일 같다.")
+                print("     경향성 판단 불가. 파고가 변하는 날 다시 잴 것.")
+
         if reference_period:
-            print("\n[파주기 기준]")
-            ranked_p = ranking("mae_period", "s")
+            print("\n[파주기 · 편향 제거 후]")
+            ranked_p = ranking("mae_period_debiased", "s")
             best_p = ranked_p[0]["model"] if ranked_p else None
 
         # 열린 질문: 파고로 고른 모델이 파주기까지 맞는가 (docs/marine-data-audit.md)
