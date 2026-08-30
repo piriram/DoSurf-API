@@ -107,6 +107,16 @@ export KMA_API_KEY=$(python3 -c "import json;print(json.load(open('<인계폴더
   `models` 지정 시 빠지는 수온·조석을 폴백 모델로 한 번 더 채운다.
   결과에 `marine_source.fallback_fields: ['sea_surface_temperature', 'sea_level_height_msl']`
   가 남는다.
+- **첨두주기는 `ecmwf_wam025`/`ecmwf_wam` 만 준다** (2026-08-30 실측).
+  `best_match`·`ncep_gfswave025/016`·`gwam`·`meteofrance_wave` 는 `wave_peak_period`
+  를 받아주기는 하되 값을 전부 `None` 으로 돌려준다. 폴백(`best_match`)으로도
+  못 받으므로 **세 번째 호출**을 따로 한다.
+  `wave_period` 는 평균주기 계열이라 서핑 앱이 쓰는 첨두주기보다 구조적으로 작다 —
+  제주 대조에서 Windfinder 8.0초 대비 평균 MAE 2.6~3.1초, 첨두 1.08초였다.
+  `wave.peak_period_s` 로 저장하고 출처는 `marine_source.peak_period_model` 에 남는다.
+  **`period_s` 의 더 정확한 버전이 아니라 정의가 다른 별개 값이다.**
+- **호출 수**: 해변 32곳 × 1회 수집 85콜 × 하루 8회 = **680콜/일** (무료 한도 10,000).
+  지역 모델이 폴백/첨두 모델과 같으면 그만큼 줄어든다.
 - **Firestore 쓰기까지 검증됐다.** `wave.period_s`, `tide`, `marine_source`가
   실제 문서에 기록되는 것을 확인했다.
 

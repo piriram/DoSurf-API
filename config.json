@@ -30,7 +30,10 @@
     "marine_model_verified": "동해(속초 대표) ncep_gfswave016 — 2026-08-26/28/29 Windfinder 대조 3일 평균 MAE 0.073으로 1위",
     "marine_model_inferred": "yangyang/gangneung/pohang은 같은 동해 해역이라 속초 결과를 적용한 추정값",
     "marine_model_pending": "jeju는 3일간 1위 모델이 매일 바뀌어 보류했습니다(default 사용). busan/west_south는 대조 데이터가 없습니다. scripts/model_compare.py로 축적 후 결정",
-    "marine_fallback_comment": "models를 지정하면 Open-Meteo가 수온·조석을 응답에서 뺍니다. 그래서 fallback_model로 한 번 더 호출해 채우고, 폴백에서 온 필드는 marine_source.fallback_fields에 기록합니다"
+    "marine_fallback_comment": "models를 지정하면 Open-Meteo가 수온·조석을 응답에서 뺍니다. 그래서 fallback_model로 한 번 더 호출해 채우고, 폴백에서 온 필드는 marine_source.fallback_fields에 기록합니다",
+    "peak_period_comment": "첨두주기(wave_peak_period)는 ecmwf_wam025/ecmwf_wam만 제공합니다. best_match·ncep_gfswave025/016·gwam·meteofrance_wave는 값을 전부 None으로 돌려줍니다(2026-08-30 실측). fallback_model(best_match)로도 못 받으므로 전용 모델을 따로 호출합니다",
+    "peak_period_why": "Windfinder·서핑 앱이 화면에 쓰는 파주기는 첨두주기인데 wave_period는 평균주기 계열입니다. 제주 2026-08-30 대조에서 Windfinder 8.0초 대비 평균주기 MAE 2.6~3.1초, 첨두주기 1.08초로 3배 차이였습니다. 모델 교체보다 정의를 맞추는 쪽이 먼저입니다 — docs/ios-migration.md",
+    "peak_period_model_choice": "ecmwf_wam(9km)은 제주 8/30 후반부에서 첨두가 2.0~3.5초로 붕괴했습니다(너울이 약해지며 스펙트럼 첨두가 풍파로 옮겨간 것으로 보임). ecmwf_wam025(25km)는 안정적이라 이쪽을 씁니다. 격자가 촘촘한 쪽이 낫다는 가정이 첨두주기에서는 깨집니다"
   },
   "marine": {
     "default_model": "best_match",
@@ -55,6 +58,10 @@
     "aux_variables": [
       "sea_surface_temperature",
       "sea_level_height_msl"
+    ],
+    "peak_period_model": "ecmwf_wam025",
+    "peak_period_variables": [
+      "wave_peak_period"
     ]
   }
 }

@@ -13,6 +13,8 @@ DEFAULT_WAVE_VARIABLES = [
     "wind_wave_height", "wind_wave_direction", "wind_wave_period",
 ]
 DEFAULT_AUX_VARIABLES = ["sea_surface_temperature", "sea_level_height_msl"]
+DEFAULT_PEAK_PERIOD_MODEL = "ecmwf_wam025"
+DEFAULT_PEAK_PERIOD_VARIABLES = ["wave_peak_period"]
 
 def load_config():
     """config.json 파일 로드"""
@@ -118,3 +120,19 @@ def get_marine_wave_variables():
 def get_marine_aux_variables():
     """폴백 모델에서 받을 보조 항목 (수온·조석)"""
     return _marine_config().get("aux_variables", DEFAULT_AUX_VARIABLES)
+
+
+def get_marine_peak_period_model():
+    """
+    첨두주기를 받아올 모델.
+
+    첨두주기(wave_peak_period)는 ecmwf_wam025/ecmwf_wam만 준다. 나머지 모델은
+    변수를 받아주기는 하되 값을 전부 None으로 돌려준다(2026-08-30 실측).
+    fallback_model(best_match)로도 못 받으므로 전용 모델을 따로 호출한다.
+    """
+    return _marine_config().get("peak_period_model", DEFAULT_PEAK_PERIOD_MODEL)
+
+
+def get_marine_peak_period_variables():
+    """첨두주기 모델에서 받을 항목"""
+    return _marine_config().get("peak_period_variables", DEFAULT_PEAK_PERIOD_VARIABLES)

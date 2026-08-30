@@ -145,6 +145,11 @@ def save_forecasts_merged(region, beach, beach_id, picked, marine, marine_meta=N
         group["wave"] = {
             "height_m": r.get("wave_height"),
             "period_s": r.get("wave_period"),
+            # 첨두주기. period_s(평균주기)와 정의가 다른 별개 값이지 더 정확한
+            # 버전이 아니다. Windfinder·서핑 앱이 화면에 쓰는 쪽이 이것이고,
+            # 평균주기는 구조적으로 더 작게 나온다 — docs/ios-migration.md.
+            # 화면에 파주기를 노출할 때 어느 쪽을 쓸지는 제품 결정이다.
+            "peak_period_s": r.get("wave_peak_period"),
             "direction_deg": r.get("wave_direction"),
             "swell": {
                 "height_m": r.get("swell_wave_height"),
@@ -171,6 +176,10 @@ def save_forecasts_merged(region, beach, beach_id, picked, marine, marine_meta=N
                 # 값이 있으면 그 필드는 wave.source와 다른 모델에서 온 것이다.
                 "fallback_model": marine_meta.get("fallback_model"),
                 "fallback_fields": marine_meta.get("fallback_fields") or [],
+                # 첨두주기는 ecmwf 계열만 주므로 파랑 모델과 다른 모델에서 온다.
+                # wave.peak_period_s 가 wave.height_m 과 다른 출처라는 뜻이다.
+                "peak_period_model": marine_meta.get("peak_period_model"),
+                "peak_period_fields": marine_meta.get("peak_period_fields") or [],
             }
 
     # -------------------------

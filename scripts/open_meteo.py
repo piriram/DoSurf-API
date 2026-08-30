@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Tuple
 try:
     from .config import (get_marine_model, get_marine_fallback_model,
                          get_marine_wave_variables, get_marine_aux_variables,
+                         get_marine_peak_period_model,
+                         get_marine_peak_period_variables,
                          get_open_meteo_retry_count, get_api_timeout)
     CONFIG_AVAILABLE = True
 except ImportError:
@@ -25,6 +27,8 @@ FALLBACK_WAVE_VARIABLES = [
     "wind_wave_height", "wind_wave_direction", "wind_wave_period",
 ]
 FALLBACK_AUX_VARIABLES = ["sea_surface_temperature", "sea_level_height_msl"]
+FALLBACK_PEAK_PERIOD_MODEL = "ecmwf_wam025"
+FALLBACK_PEAK_PERIOD_VARIABLES = ["wave_peak_period"]
 DEFAULT_MODEL = "best_match"
 DEFAULT_RETRIES = 3
 DEFAULT_TIMEOUT = 20
@@ -40,6 +44,7 @@ VALUE_RANGES = {
     "wave_direction": (0.0, 360.0),
     "swell_wave_direction": (0.0, 360.0),
     "wind_wave_direction": (0.0, 360.0),
+    "wave_peak_period": (0.0, 30.0),
     "sea_surface_temperature": (-2.0, 40.0),
     "sea_level_height_msl": (-10.0, 10.0),
 }
@@ -157,6 +162,7 @@ def fetch_marine(lat: float, lon: float, *,
       - wave_height / wave_direction / wave_period
       - swell_wave_height / swell_wave_direction / swell_wave_period
       - wind_wave_height / wind_wave_direction / wind_wave_period
+      - wave_peak_period  (첨두주기)
       - sea_surface_temperature
       - sea_level_height_msl  (조석, 평균해수면 기준)
       결측이거나 범위를 벗어난 값은 None으로 남긴다.
@@ -165,12 +171,21 @@ def fetch_marine(lat: float, lon: float, *,
       model, grid_lat, grid_lon, snap_distance_km, fetched_at,
       fallback_model, fallback_fields (폴백에서 채운 필드 목록)
 
-    ── 왜 두 번 호출하나 ──
+    ── 왜 세 번 호출하나 ──
     Open-Meteo는 models 파라미터를 지정하면 수온·조석을 응답에서 뺀다.
     ecmwf_wam025는 스웰 분해(swell_*, wind_wave_*)도 주지 않는다.
     그래서 지역 모델로 파랑 변수를 받고, 폴백 모델(best_match)로 한 번 더 호출해
     빠진 필드를 채운다. 어느 필드를 폴백에서 가져왔는지는 meta에 남긴다 —
     출처가 섞인 것을 나중에 알 수 있어야 하기 때문이다.
+
+    세 번째는 첨두주기다. wave_peak_period 는 ecmwf 계열만 주고 폴백(best_match)
+    으로도 안 온다. 그런데 Windfinder·서핑 앱이 화면에 쓰는 파주기가 첨두주기라
+    (wave_period 는 평균주기 계열) 이 값이 없으면 우리 파주기는 구조적으로 낮게
+    나온다 — 제주 대조에서 MAE 2.6~3.1초 대 1.08초였다.
+    그래서 전용 모델을 한 번 더 부른다. 어느 모델에서 왔는지는
+    meta.peak_period_model 에 남는다.
+
+    지역 모델이 폴백 모델이나 첨두주기 모델과 같으면 그만큼 호출이 줄어든다.
 
     지역별 모델 선택 근거는 docs/marine-data-audit.md 「2차 검증」 참조.
     """
@@ -179,16 +194,26 @@ def fetch_marine(lat: float, lon: float, *,
     fallback_model = get_marine_fallback_model() if CONFIG_AVAILABLE else DEFAULT_MODEL
     wave_vars = get_marine_wave_variables() if CONFIG_AVAILABLE else FALLBACK_WAVE_VARIABLES
     aux_vars = get_marine_aux_variables() if CONFIG_AVAILABLE else FALLBACK_AUX_VARIABLES
-    all_vars = list(wave_vars) + list(aux_vars)
+    peak_model = (get_marine_peak_period_model() if CONFIG_AVAILABLE
+                  else FALLBACK_PEAK_PERIOD_MODEL)
+    peak_vars = (get_marine_peak_period_variables() if CONFIG_AVAILABLE
+                 else FALLBACK_PEAK_PERIOD_VARIABLES)
+    all_vars = list(wave_vars) + list(aux_vars) + list(peak_vars)
     if timeout is None:
         timeout = get_api_timeout() if CONFIG_AVAILABLE else DEFAULT_TIMEOUT
     if retries is None:
         retries = get_open_meteo_retry_count() if CONFIG_AVAILABLE else DEFAULT_RETRIES
 
-    # 지역 모델이 폴백과 같으면 한 번만 호출하면 된다
+    # 지역 모델이 폴백과 같으면 보조 변수까지 한 번에 받을 수 있다
     single_call = (model == fallback_model)
+    # 지역 모델이 이미 첨두주기를 주는 모델이면 따로 부르지 않는다
+    peak_in_primary = (model == peak_model)
 
-    primary_vars = all_vars if single_call else wave_vars
+    primary_vars = list(wave_vars)
+    if single_call:
+        primary_vars += list(aux_vars)
+    if peak_in_primary:
+        primary_vars += list(peak_vars)
     primary = _request(lat, lon, primary_vars, model, timezone,
                        forecast_days, timeout, retries)
     times, series = _extract(primary, primary_vars)
@@ -205,6 +230,8 @@ def fetch_marine(lat: float, lon: float, *,
         "fetched_at": kst_now(),
         "fallback_model": None,
         "fallback_fields": [],
+        "peak_period_model": model if peak_in_primary else None,
+        "peak_period_fields": list(peak_vars) if peak_in_primary else [],
     }
 
     if not single_call:
@@ -228,6 +255,30 @@ def fetch_marine(lat: float, lon: float, *,
         except Exception as exc:
             # 보조 변수가 없어도 파고는 살아 있으므로 수집을 중단하지는 않는다
             print(f"   ⚠ 보조 변수 수집 실패({fallback_model}): {exc}")
+
+    if not peak_in_primary and peak_vars:
+        # ── 세 번째 호출: 첨두주기 ──
+        # 첨두주기는 ecmwf 계열만 준다. 폴백(best_match)으로도 안 오기 때문에
+        # 수온·조석 호출에 얹을 수 없고 전용 모델을 따로 불러야 한다.
+        # 왜 첨두주기가 필요한지는 config.json 의 peak_period_why 참조.
+        try:
+            peak = _request(lat, lon, peak_vars, peak_model, timezone,
+                            forecast_days, timeout, retries)
+            peak_times, peak_series = _extract(peak, peak_vars)
+            # 시각 축이 어긋나면 채우지 않는다 (잘못 정렬된 값보다 결측이 낫다)
+            if peak_times == times:
+                for name in peak_vars:
+                    values = peak_series.get(name, [])
+                    if _has_data(values):
+                        series[name] = values
+                        meta["peak_period_fields"].append(name)
+                if meta["peak_period_fields"]:
+                    meta["peak_period_model"] = peak_model
+                    meta["peak_grid_lat"] = peak.get("latitude")
+                    meta["peak_grid_lon"] = peak.get("longitude")
+        except Exception as exc:
+            # 첨두주기가 없어도 파고·평균주기는 살아 있다
+            print(f"   ⚠ 첨두주기 수집 실패({peak_model}): {exc}")
 
     out = []
     for i, t in enumerate(times):
