@@ -261,6 +261,37 @@ Firestore의 기상청 풍속(iOS가 실제로 쓰는 값)으로 추정식을 �
   끊겨 `None` 이 돌아온다. `has_credentials()` 가 먼저 걸러낸다.
 - 무료지만 **2028-06-30까지만 보장**이다 (docs/MARINE_DATA_INVESTIGATION.md).
 
+### 매일 자동으로 표본 쌓기
+
+모델 궁합은 하루치로 못 정한다 — 1·2위 차이가 측정 노이즈보다 작다.
+표본이 자동으로 모이도록 launchd 에이전트를 걸어뒀다.
+
+```sh
+bash scripts/daily_compare.sh            # 손으로 한 번
+launchctl start com.dosurf.compare       # 에이전트를 즉시 한 번
+launchctl list | grep dosurf             # 등록 확인
+tail -30 data/compare_log/$(date +%F).log
+```
+
+- 매일 **09:30 KST**. Windfinder가 지나간 시각도 페이지에 유지하므로 새벽일
+  필요가 없고, 맥이 켜져 있을 시간을 고른 것이다. 꺼져 있으면 launchd가 다음
+  기상 때 한 번 밀어서 실행한다
+- 대상은 `sokcho`, `jeju`. 결과는 `data/model_compare.jsonl` 에 append
+- **종료코드만 믿지 않는다.** Windfinder 파싱이 깨지면 기준값이 비어도 스크립트는
+  정상 종료한다. 그래서 "기록 추가" 문구가 실제로 찍혔는지 확인한 뒤 실패로 센다
+- `cmems` 는 뺐다 — 자격증명이 만료되면 조용히 실패하고 파고에서 이기지도 않았다.
+  필요하면 손으로 `--models` 에 `cmems,cmems_peak` 를 붙인다
+- Windy 값은 자동으로 못 받는다. 나중에 `--reference-windy` 로 같은 날짜를 다시
+  돌리면 롤업이 최신 기록만 쓴다
+- 로그는 `data/compare_log/` 에 30일치. gitignore 대상
+
+**끄려면:**
+
+```sh
+launchctl unload ~/Library/LaunchAgents/com.dosurf.compare.plist
+rm ~/Library/LaunchAgents/com.dosurf.compare.plist
+```
+
 ### 누적분으로 결론 내기
 
 ```sh

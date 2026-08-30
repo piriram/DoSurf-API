@@ -4,6 +4,9 @@
 # Env
 .env
 
+# 대조 자동 수집 로그 (scripts/daily_compare.sh)
+data/compare_log/
+
 # Python bytecode
 __pycache__/
 

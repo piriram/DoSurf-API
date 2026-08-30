@@ -110,7 +110,8 @@ graph LR
 │   ├── windfinder.py            # Windfinder 예보 수집 (검증용, 저장 안 함)
 │   ├── model_compare.py         # 파랑모델 vs Windfinder·Windy 하루치 대조
 │   ├── compare_rollup.py        # 대조 누적분 집계 — 모델 확정/보정계수 결론
-│   └── copernicus.py            # CMEMS 파랑 예보 수집 (대안 후보 검증용)
+│   ├── copernicus.py            # CMEMS 파랑 예보 수집 (대안 후보 검증용)
+│   └── daily_compare.sh         # 대조 표본 매일 자동 수집 (launchd)
 ├── jobs/
 │   ├── api_functions.py
 │   └── cleanup_old_forecasts.py
