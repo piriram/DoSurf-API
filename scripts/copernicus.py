@@ -79,6 +79,7 @@ VALUE_RANGES = {
 }
 
 KST_OFFSET = datetime.timedelta(hours=9)
+UTC = datetime.timezone.utc
 
 # 0.083° 격자에서 몇 칸을 확보할 상자 크기. 육지 격자를 피해 바다 칸을 고르려면
 # 한 점만 봐서는 안 된다 — Open-Meteo 의 `cell_selection=sea` 를 손으로 하는 셈이다.
@@ -202,8 +203,14 @@ def fetch_marine(lat, lon, *, forecast_days=3, start_date=None):
     end_kst = start_kst + datetime.timedelta(days=forecast_days)
 
     # 조회는 UTC로 한다. 경계에서 잘리지 않도록 앞뒤로 한 스텝씩 여유를 준다.
-    start_utc = start_kst - KST_OFFSET - datetime.timedelta(hours=3)
-    end_utc = end_kst - KST_OFFSET + datetime.timedelta(hours=3)
+    #
+    # ── tzinfo 를 반드시 붙인다 ──
+    # naive datetime 을 넘기면 툴박스가 그것을 **실행 머신의 로컬 시간**으로
+    # 해석해 UTC로 바꾼다. KST 머신에서는 요청 창이 통째로 9시간 앞으로 밀려서,
+    # 하루치를 달라고 해도 21시(KST)가 잘려 나간다. 그러면 model_compare 가
+    # "결측"으로 보고 CMEMS를 통째로 버린다. (2026-08-30 실측으로 확인)
+    start_utc = (start_kst - KST_OFFSET - datetime.timedelta(hours=3)).replace(tzinfo=UTC)
+    end_utc = (end_kst - KST_OFFSET + datetime.timedelta(hours=3)).replace(tzinfo=UTC)
 
     if not has_credentials():
         raise RuntimeError("CMEMS 자격증명이 없다.\n" + _SIGNUP)
