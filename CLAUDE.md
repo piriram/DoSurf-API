@@ -44,7 +44,9 @@ scripts/
   firebase_utils.py     Firestore 클라이언트 (지연 초기화)
   locations.json        해변 32곳 정의
   windfinder.py         Windfinder 예보 페이지에서 파고·파주기 수집 (검증용)
-  model_compare.py      파랑 모델을 Windfinder와 대조 — 편향/모양 분리
+  model_compare.py      파랑 모델을 Windfinder·Windy와 대조 — 편향/모양 분리
+  compare_rollup.py     model_compare 누적분(jsonl)을 여러 날로 집계 — 결론은 여기서
+  copernicus.py         Copernicus Marine(CMEMS) 파랑 예보 수집 (대안 후보 검증용)
   compare_period.py     iOS 파주기 추정식이 실제와 얼마나 다른지 측정
 config.json          ← 수집 주기·모델 선택 등 런타임 설정
 ```
@@ -144,6 +146,38 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 지점은 `sokcho`, `jeju` 두 곳이 정의돼 있다(`REFERENCE_SPOTS`).
 `--out` 으로 누적해야 여러 날 비교가 쌓인다.
 
+### Windy까지 3자 대조
+
+```sh
+.venv/bin/python3 -m scripts.model_compare --spot sokcho --from-windfinder \
+  --reference-windy 1.3,1.2,1.1,1.0,1.0,0.9,0.8,0.7 \
+  --out data/model_compare.jsonl
+```
+
+Windy 값은 **사람이 windy.com에서 읽어 넣는다.** 자동화 경로가 없다:
+
+- Windy Point Forecast API **무료 Trial은 난수를 돌려준다** — 공식 문구가
+  "randomly shuffled and slightly modified data"다. 검증에 쓰면 안 된다.
+- 실데이터는 Professional **€990/년**뿐이다.
+- 스크래핑은 하지 말 것. windy.com은 WebGL SPA라 HTML 파싱이 불가능하고
+  ToS에도 걸린다.
+
+**Windy의 파랑 모델은 전부 우리가 이미 쓰는 모델이다.** 표에서 `*` 가 그 표시다.
+
+| Windy 모델명 | 실제 기관/모델 | Open-Meteo 이름 |
+|---|---|---|
+| `gfsWave` | NOAA/NCEP GFS-Wave (WW3) | `ncep_gfswave025` · `ncep_gfswave016` |
+| `iconWave` | DWD GWAM | `gwam` |
+| `iconEuWave` | DWD EWAM | `ewam` — **한국은 커버리지 밖**(2026-08-30 확인, "No data is available for this location") |
+
+그러므로 한국에서 Windy가 보여주는 파랑 모델은 `gfsWave`·`iconWave` 둘뿐이고,
+이 대조가 재는 것은 "Windy 예보가 더 맞나"가 아니라
+**"같은 모델을 Windy가 어떻게 격자 스냅·보간했나"** 다.
+
+출력의 `[기준끼리]` 줄이 Windy와 Windfinder가 서로 얼마나 다른지를 먼저 보여준다.
+모델 1·2위 차이가 이 값보다 작으면 순위가 기준 선택에 좌우된다는 뜻이라
+스크립트가 경고한다. 그 경고가 뜨면 순위를 근거로 쓰지 말 것.
+
 **출력 읽는 법 — MAE만 보면 안 된다.** MAE는 성격이 다른 둘을 한 숫자에 섞는다.
 
 | 열 | 뜻 | 고치는 방법 |
@@ -177,6 +211,62 @@ Firestore의 기상청 풍속(iOS가 실제로 쓰는 값)으로 추정식을 �
 
 **하루치로 상수를 박지 말 것.** 예전에 제거한 `+0.5` 보정이 그렇게 들어왔다.
 여러 날 `data/model_compare.jsonl` 을 쌓아 편향 평균을 구한 뒤에 넣는다.
+
+### Copernicus Marine(CMEMS) 대안 후보 재기
+
+```sh
+.venv/bin/pip install -r requirements-dev.txt      # 배포엔 안 들어간다
+.venv/bin/copernicusmarine login                   # 무료 계정 필요, 한 번만
+.venv/bin/python3 -m scripts.copernicus            # 단독 확인 (속초)
+
+.venv/bin/python3 -m scripts.model_compare --spot sokcho --from-windfinder \
+  --models best_match,ncep_gfswave016,ecmwf_wam025,cmems,cmems_peak \
+  --out data/model_compare.jsonl
+```
+
+`cmems` / `cmems_peak` 는 Open-Meteo 모델이 아니라 CMEMS를 가리키는 가짜
+모델명이다. 같은 자료를 파주기만 다르게 읽는다:
+
+| 이름 | CMEMS 변수 | 뜻 |
+|---|---|---|
+| `cmems` | `VTM10` | 평균주기 — Open-Meteo `wave_period` 와 같은 계열 |
+| `cmems_peak` | `VTPK` | 첨두주기 — Windfinder·서핑 앱이 화면에 쓰는 값 |
+
+**파주기 순위에서 이 둘이 갈리면 결론이 바뀐다.** 지금까지 "파주기가 안 맞는다"고
+본 것(제주 8/28 Windfinder 10~11초 vs 우리 5.4~7.3초, docs/ios-migration.md)이
+모델 문제가 아니라 **정의가 다른 값을 비교하고 있었던 것**일 수 있다.
+
+제품: `cmems_mod_glo_wav_anfc_0.083deg_PT3H-i` — 0.083°(~9km) · 3시간 간격 ·
+10일 예보. **UTC 3시간 격자가 KST로 옮겨도 0,3,...,21시에 그대로 떨어진다**
+(+9h 가 3의 배수라서). `ALLOWED_HOURS` 와 보간 없이 맞는다.
+
+주의할 점:
+
+- **수온·조석이 이 제품에 없다.** 파랑 전용이다. CMEMS로 갈아타도 수온은
+  Open-Meteo에 계속 의존해야 한다.
+- **`cell_selection=sea` 같은 옵션이 없다.** 가장 가까운 격자가 육지면 NaN이
+  온다. `copernicus.py` 의 `_pick_sea_cell()` 이 ±0.5° 상자에서 유효한 칸 중
+  제일 가까운 것을 직접 고른다.
+- 자격증명이 없으면 툴박스가 **대화형으로 아이디를 묻고**, 배치에서는 EOF로
+  끊겨 `None` 이 돌아온다. `has_credentials()` 가 먼저 걸러낸다.
+- 무료지만 **2028-06-30까지만 보장**이다 (docs/MARINE_DATA_INVESTIGATION.md).
+
+### 누적분으로 결론 내기
+
+```sh
+.venv/bin/python3 -m scripts.compare_rollup
+.venv/bin/python3 -m scripts.compare_rollup --spot sokcho --reference windy
+```
+
+지점별로 날짜를 모아 편향제거 MAE 평균·편향 평균·**편향 표준편차**·1위 획득
+횟수를 낸다. 판정 규칙:
+
+- 표본 5일 미만 → 결론 보류
+- 1위가 날마다 바뀌고 최다 득표가 60% 미만 → 아직 노이즈. 더 쌓을 것
+- 편향 표준편차가 편향 절댓값의 절반 미만 → 상수 보정계수 후보. 아니면 상수화 금지
+
+`data/model_compare.jsonl` 초기 2건(2026-08-30)은 편향·상관 분리 이전 스키마라
+MAE만 있다. 롤업이 그 날짜 수를 따로 알려주고 편향제거 평균에서 제외한다.
 
 ### ⚠️ 수집을 돌리면 데이터가 지워진다
 

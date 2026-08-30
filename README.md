@@ -106,7 +106,11 @@ graph LR
 │   ├── open_meteo.py
 │   ├── storage.py
 │   ├── firebase_utils.py
-│   └── alerts.py                # backward-compatible shim
+│   ├── alerts.py                # backward-compatible shim
+│   ├── windfinder.py            # Windfinder 예보 수집 (검증용, 저장 안 함)
+│   ├── model_compare.py         # 파랑모델 vs Windfinder·Windy 하루치 대조
+│   ├── compare_rollup.py        # 대조 누적분 집계 — 모델 확정/보정계수 결론
+│   └── copernicus.py            # CMEMS 파랑 예보 수집 (대안 후보 검증용)
 ├── jobs/
 │   ├── api_functions.py
 │   └── cleanup_old_forecasts.py
@@ -119,7 +123,8 @@ graph LR
 ├── cleanup_old_forecasts.py     # jobs/cleanup_old_forecasts.py 호환 래퍼
 ├── server.py                    # app/api/routes.py 진입 래퍼
 ├── main.py                      # app/services/collection.py 진입 래퍼
-└── requirements.txt
+├── requirements.txt
+└── requirements-dev.txt         # 검증 도구 전용 (배포 이미지에 미포함)
 ```
 
 ---
