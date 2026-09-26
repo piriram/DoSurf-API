@@ -48,6 +48,7 @@ scripts/
   compare_rollup.py     model_compare 누적분(jsonl)을 여러 날로 집계 — 결론은 여기서
   copernicus.py         Copernicus Marine(CMEMS) 파랑 예보 수집 (대안 후보 검증용)
   compare_period.py     iOS 파주기 추정식이 실제와 얼마나 다른지 측정
+  grid_coverage.py      대조 지점의 결론을 어느 해변에 적용할 수 있는지 — 격자 일치 판정
 config.json          ← 수집 주기·모델 선택 등 런타임 설정
 ```
 
@@ -159,8 +160,9 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 ```
 
 `--from-windfinder` 가 예보 페이지에서 파고·파주기를 직접 읽어 넣는다.
-지점은 열 곳이 정의돼 있다(`REFERENCE_SPOTS`) — `sokcho`, `jeju`, `wolpo`,
-`mallipo`, `seogwipo`, `hamdok`, `yeosu`, `gisamun`, `donghae`, `ulsan`.
+지점은 열두 곳이 정의돼 있다(`REFERENCE_SPOTS`) — `sokcho`, `jeju`, `wolpo`,
+`mallipo`, `seogwipo`, `jungmun`, `mosulpo`, `hamdok`, `yeosu`, `gisamun`,
+`donghae`, `ulsan`. 그중 `seogwipo` 는 자동 수집에서 빠져 있다(아래 참조).
 
 ### ⚠️ 대조 지점 좌표는 해변 좌표가 아니다
 
@@ -182,6 +184,8 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 | west_south | best_match | 2 | mallipo · yeosu | 1/2 | 4.3km | 32.2km |
 | yangyang | ncep_gfswave016 | 6 | gisamun | **6/6** | 7.7km | 4.5km |
 
+이 표는 `jungmun`·`mosulpo` 추가 전 값이다. 현재 수치는 `grid_coverage.py` 로 본다.
+
 합계 14/32곳만 같은 격자다. 지점 추가 전에는 sokcho 가 동해안 16곳을 대표하며
 그중 15곳이 격자가 달랐다.
 
@@ -194,14 +198,46 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 **수집 자체는 해변에서 가깝다** — 스냅거리 중앙값 8.7km · 최대 18.6km(함덕).
 문제는 수집이 먼 격자를 쓰는 게 아니라 **대조 지점과 다른 격자를 쓰는 것**이다.
 
-**그래서 무엇을 믿고 무엇을 믿지 않나.** 모델 **선택**(어느 모델이 이 해역에서
-더 정확한가)은 모델의 체계적 특성이라 인접 격자로 어느 정도 전이된다.
-**편향(보정계수)은 격자마다 달라 전이되지 않는다** — 대조 지점에서 구한 편향을
-해변에 상수로 박으면 안 된다. 「보정계수를 넣을 때」의 금지 규칙이 통계적 이유
-말고도 이 구조적 이유를 함께 갖고 있다.
+**격자가 다르면 순위도 편향도 전이되지 않는다.** 2026-09-27 실측이다.
 
-`gangneung` 7곳이 가장 약하다. 강릉 본체(경포·사천·주문진)는 Windfinder 에
-페이지가 없어서 북쪽은 `sokcho`, 남쪽은 `donghae` 가 나눠 대표한다.
+| | 값 |
+|---|---|
+| 격자가 다른 15곳의 파고차 | 중앙값 **0.020m** · 최대 0.083m |
+| 격자가 같은 14곳의 파고차 | **0.000m** (같은 칸이니 당연하다) |
+| 모델 1·2위 편향제거 MAE 차 | **0.001m** (4주 집계) |
+
+**공간 차이가 모델 차이를 20~80배 압도한다.** 그래서 대조에서 "이 모델이 1위"라고
+나와도 격자가 다른 해변에서는 그 순위가 유지된다는 보장이 없다. 「보정계수를
+넣을 때」의 금지 규칙이 통계적 이유(σ) 말고도 이 구조적 이유를 함께 갖고 있다.
+
+**모델 호출 좌표를 해변 좌표로 옮기는 것은 해법이 아니다.** 기준값(Windfinder
+파고·파주기)은 그 지점 좌표에 대한 예보다. 모델만 해변으로 옮기면 같은 크기의
+공간 오차가 기준값 비교에 들어와, 위치 차이와 모델 오차를 구분할 수 없게 된다.
+
+### 결론을 어느 해변에 적용할 수 있나 — `scripts/grid_coverage.py`
+
+```sh
+.venv/bin/python3 -m scripts.grid_coverage          # 표로 확인
+.venv/bin/python3 -m scripts.grid_coverage --save   # data/grid_coverage.json 갱신
+```
+
+지점별로 **격자가 같은 해변**(결론 적용 가능)과 **다른 해변**(적용 불가)을 가른다.
+`--save` 로 만든 파일을 `model_compare.py` 가 읽어 출력에 찍는다 — 파일이 없으면
+"격자 커버리지를 모른다"고 경고한다. **`config.json` 의 `region_models` 를 바꾸면
+다시 돌릴 것.** 격자는 모델마다 다르다.
+
+현재 **16/29곳**에 적용할 수 있다. `gisamun` 이 yangyang 6곳 전부를,
+`jungmun`·`mosulpo` 가 중문·사계를 정확히 덮는다.
+
+**적용 불가로 남은 것:** 강릉 4곳(경포·사천·사천진·금진)과 삼척 용화는 그 격자에
+떨어지는 Windfinder 지점을 못 찾았다 — `mukho`·`santyoku`·`tonghae` 는 전부
+`donghae` 와 같은 칸이고, 강릉 본체 페이지들은 파도 데이터가 없다. 고성 2곳,
+영덕 부흥, 울산 진하, 고흥 남열, busan 3곳도 공백이다.
+
+**적용 가능 해변이 0곳인 지점은 자동 수집에서 뺀다.** `seogwipo` 가 그래서
+빠졌다 — 격자가 `(33.21, 126.54)` 로 어느 해변과도 맞지 않는다. 정의는 남겨
+뒀으니 필요하면 `--spot seogwipo` 로 손으로 돌린다. `ulsan`·`yeosu` 는 0곳이지만
+그 지역의 유일한 지점이라 근사 참고용으로 남겨 뒀다.
 
 `--spot` 이름과 Windfinder slug 는 다를 수 있다(`seogwipo` 의 페이지는
 `seogwipo_jeju-do_south_korea`). 매핑은 `REFERENCE_SPOTS` 의 `windfinder` 필드다.

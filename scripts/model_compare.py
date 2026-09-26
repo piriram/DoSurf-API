@@ -141,7 +141,16 @@ REFERENCE_SPOTS = {
     # (33.5142/126.5297)는 제주시 북서라 사계·중문 같은 남쪽 서핑 스팟과 멀다.
     "seogwipo": {"lat": 33.2533, "lon": 126.5618,
                  "windfinder": "seogwipo_jeju-do_south_korea",
-                 "regions": ["jeju"]},        # 남부 — 사계·중문 쪽
+                 "regions": ["jeju"]},        # 남부 — 격자 일치 해변은 0곳이다
+    # ── 격자를 맞춰 고른 지점 (2026-09-27) ──
+    # seogwipo 는 제주 남부이긴 한데 격자가 (33.21,126.54)로, locations.json 의
+    # 어느 해변과도 맞지 않는다. 그래서 결론을 적용할 해변이 0곳이었다.
+    # 아래 둘은 **해변의 수집 격자와 정확히 같은 칸**에 떨어진다 —
+    # 서핑 스팟인 중문·사계가 이 둘로 처음 근거를 갖는다.
+    "jungmun":  {"lat": 33.2449, "lon": 126.4118, "windfinder": "jungmun",
+                 "regions": ["jeju"]},        # 중문 격자 (33.208336, 126.375015)
+    "mosulpo":  {"lat": 33.2030, "lon": 126.2720, "windfinder": "mosulpo_jeju_do",
+                 "regions": ["jeju"]},        # 사계 격자 (33.208336, 126.29167)
     "hamdok":   {"lat": 33.5424, "lon": 126.6707,
                  "windfinder": "hamdok_ri_beach",
                  "regions": ["jeju"]},        # 북동 — 함덕해변과 0.2km
@@ -172,7 +181,12 @@ REFERENCE_SPOTS = {
                  "regions": ["pohang"]},
 }
 
-# `yangyang_virtual_buoy` 는 쓰지 않는다. Windfinder 의 "virtual buoy" 는 관측이
+# 강릉 4곳(경포·사천·사천진·금진, 격자 (37.833336, 129.0))과 삼척 용화
+# (37.333336, 129.33334)는 격자를 잡는 지점을 못 찾았다. mukho · santyoku ·
+# tonghae 는 전부 donghae 와 같은 격자 (37.5, 129.16669)로 떨어진다
+# (2026-09-27 확인). 강릉 본체 페이지들은 파도 데이터가 없다.
+#
+# `yangyang_virtual_buoy` 와 `gangneung_virtual_buoy` 는 쓰지 않는다. Windfinder 의 "virtual buoy" 는 관측이
 # 아니라 모델 산출점이라, 기준값으로 쓰면 모델을 모델로 검증하는 순환이 된다.
 # 강릉 본체(경포·사천·주문진)는 Windfinder 에 페이지가 없다 — gyeongpo ·
 # jumunjin · gangneung_beach · sacheonjin · jeongdongjin · okgye · mangsang ·
@@ -730,9 +744,37 @@ def main():
             print(f"\n두 기준이 같은 모델을 고른다: {next(iter(picks.values()))}")
 
     if args.spot and results:
+        # ── 결론을 어느 해변에 적용할 수 있는지 ──
+        # "이 지역을 대표한다"고만 적으면 오해를 준다. 실제로는 **Open-Meteo
+        # 격자가 같은 해변에만** 적용할 수 있다. 격자가 다르면 그 차이가 모델
+        # 차이를 20배 이상 압도한다 (격자간 파고차 중앙값 0.020m vs 모델
+        # 1·2위 차 0.001m, 2026-09-27 실측). scripts/grid_coverage.py 참조.
         regions = ", ".join(REFERENCE_SPOTS[args.spot]["regions"])
-        print(f"\n이 지점이 대표하는 지역: {regions}")
-        print("config.json 의 marine.region_models 를 바꾸려면 여러 날 결과를 먼저 쌓으세요.")
+        print(f"\n이 지점의 담당 지역: {regions}")
+
+        cov_path = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "data", "grid_coverage.json")
+        try:
+            with open(cov_path, encoding="utf-8") as f:
+                cov = json.load(f)["spots"].get(args.spot, {})
+        except (OSError, ValueError, KeyError):
+            cov = None
+
+        if cov is None:
+            print("  ⚠️ 격자 커버리지를 모른다. 담당 지역의 해변 전부에 이 결론을")
+            print("     적용할 수 있다고 가정하지 말 것 — 좌표가 달라 격자도 다를 수 있다.")
+            print("     .venv/bin/python3 -m scripts.grid_coverage --save 로 먼저 계산할 것.")
+        else:
+            ok, no = cov.get("applies_to") or [], cov.get("differs") or []
+            if ok:
+                print(f"  적용 가능 ({len(ok)}곳, 격자 동일): {', '.join(ok)}")
+            else:
+                print("  ⚠️ 적용 가능한 해변이 없다 — 이 지점과 격자가 같은 해변이 하나도 없다.")
+            if no:
+                print(f"  적용 불가 ({len(no)}곳, 격자 다름): {', '.join(no)}")
+                print("     격자가 다르면 모델 순위도 편향도 전이되지 않는다.")
+
+        print("\nconfig.json 의 marine.region_models 를 바꾸려면 여러 날 결과를 먼저 쌓으세요.")
         print("누적분 집계: .venv/bin/python3 -m scripts.compare_rollup")
 
     if args.out and results:

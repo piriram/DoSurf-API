@@ -24,7 +24,10 @@ LOGDIR="$REPO/data/compare_log"
 # 2026-09-27 에 추가했다. pohang·west_south 는 대조 근거 없이 모델이 정해져
 # 있었고, 제주는 남(33.22)~북동(33.56)이 파도가 달라 한 지점으로 못 대표한다.
 # busan(3곳)은 Windfinder 페이지를 못 찾아 아직 공백이다.
-SPOTS=(sokcho jeju wolpo mallipo seogwipo hamdok yeosu gisamun donghae ulsan)
+# seogwipo 는 뺐다 - 격자가 (33.21,126.54)로 locations.json 의 어느 해변과도
+# 맞지 않아 결론을 적용할 해변이 0곳이다. jungmun·mosulpo 가 중문·사계 격자에
+# 정확히 떨어져 그 역할을 대신한다. 필요하면 손으로 --spot seogwipo 를 돌린다.
+SPOTS=(sokcho jeju wolpo mallipo jungmun mosulpo hamdok yeosu gisamun donghae ulsan)
 
 # 파고 후보 전체 + 첨두주기를 주는 ecmwf 계열.
 #
