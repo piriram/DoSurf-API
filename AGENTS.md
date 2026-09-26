@@ -115,6 +115,12 @@ export KMA_API_KEY=$(python3 -c "import json;print(json.load(open('<인계폴더
   제주 대조에서 Windfinder 8.0초 대비 평균 MAE 2.6~3.1초, 첨두 1.08초였다.
   `wave.peak_period_s` 로 저장하고 출처는 `marine_source.peak_period_model` 에 남는다.
   **`period_s` 의 더 정확한 버전이 아니라 정의가 다른 별개 값이다.**
+- **과거를 소급 복원할 수 없다** (2026-09-27 실측). Open-Meteo marine 은 과거
+  날짜에 `wave_peak_period` 를 정상적으로 돌려주지만, **그날 발표된 예보가 아니라
+  최신 런의 값**이다. 저장된 옛 기록과 같은 날짜·같은 모델의 평균주기를 다시 받아
+  비교하면 00시만 일치하고 뒤로 갈수록 벌어진다(속초 9/2: 당시 6.95 → 지금 7.70).
+  그래서 파주기 축을 소급해 채우면 "지금의 재분석 vs 당시 Windfinder 예보"가 되어
+  **예보시점 축이 새로 어긋난다.** 표본은 앞으로 쌓는 것만 쓴다.
 - **호출 수**: 해변 32곳 × 1회 수집 85콜 × 하루 8회 = **680콜/일** (무료 한도 10,000).
   지역 모델이 폴백/첨두 모델과 같으면 그만큼 줄어든다.
 - **Firestore 쓰기까지 검증됐다.** `wave.period_s`, `tide`, `marine_source`가
@@ -153,8 +159,22 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 ```
 
 `--from-windfinder` 가 예보 페이지에서 파고·파주기를 직접 읽어 넣는다.
-지점은 `sokcho`, `jeju` 두 곳이 정의돼 있다(`REFERENCE_SPOTS`).
+지점은 `sokcho`, `jeju`, `wolpo`, `mallipo` 네 곳이 정의돼 있다(`REFERENCE_SPOTS`).
 `--out` 으로 누적해야 여러 날 비교가 쌓인다.
+
+**표본을 늘리는 방법은 지점 추가뿐이다.** 같은 날 여러 번 돌려도 롤업이
+`(지점, 날짜)` 로 중복을 제거해 최신 것만 남기므로 표본은 하루 1개다.
+과거 날짜로 다시 받는 것도 안 된다 — 아래 「과거를 소급 복원할 수 없다」 참조.
+
+지점 좌표는 **Windfinder 예보 페이지 HTML 의 `"lat"`/`"lon"` 값**을 쓴다.
+`locations.json` 의 해변 좌표가 아니다(1km 남짓 차이 난다). 기준값을 만든 쪽의
+좌표로 재야 격자 스냅이 같은 조건이 된다. `sokcho`·`jeju` 는 2026-09-27에
+페이지 값과 0.00km 일치를 확인했다.
+
+**`busan`(송정·다대포·광안리 3곳)은 아직 대조 지점이 없다.** Windfinder 에
+`songjeong`·`dadaepo`·`gwangalli`·`haeundae`·`gijang`·`ilgwang`·`busan` 이
+전부 404다(2026-09-27 확인). 이름이 다른 페이지를 찾으면 `REFERENCE_SPOTS` 에
+추가할 것.
 
 **파주기는 첨두(peak)끼리만 비교한다.** 기준값인 Windfinder가 화면에 쓰는 값이
 첨두주기라서다. 이 스크립트는 `wave_peak_period` 를 함께 요청하고, 값이 오는

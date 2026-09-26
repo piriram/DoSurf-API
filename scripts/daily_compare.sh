@@ -18,7 +18,11 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$REPO/.venv/bin/python3"
 OUT="$REPO/data/model_compare.jsonl"
 LOGDIR="$REPO/data/compare_log"
-SPOTS=(sokcho jeju)
+# 지점이 표본을 늘리는 유일한 축이다 — 같은 날 여러 번 돌려도 롤업이
+# (지점, 날짜)로 중복을 제거해서 표본은 하루 1개다.
+# wolpo(포항) · mallipo(태안)는 2026-09-27 추가. 그전까지 두 지역은 대조
+# 근거 없이 모델이 정해져 있었다. busan 은 Windfinder 페이지를 못 찾았다.
+SPOTS=(sokcho jeju wolpo mallipo)
 
 # 파고 후보 전체 + 첨두주기를 주는 ecmwf 계열.
 #

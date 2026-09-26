@@ -114,12 +114,33 @@ import requests
 BASE_URL = "https://marine-api.open-meteo.com/v1/marine"
 
 # Windfinder 지점 좌표. 대조는 반드시 Windfinder가 쓰는 좌표로 해야 의미가 있다.
+#
+# 좌표는 Windfinder 예보 페이지 HTML 에 박혀 있는 값을 그대로 쓴다
+# (`"n_def":[0,"Sokcho"],"lat":[0,38.25],"lon":[0,128.566]`).
+# locations.json 의 해변 좌표가 아니다 — 1km 남짓 차이가 나고, 기준값을 만든
+# 쪽의 좌표로 재야 격자 스냅이 같은 조건이 된다.
+# 2026-09-27 에 sokcho·jeju 를 페이지 값과 대조해 0.00km 일치를 확인했다.
+#
+# 지점을 늘리는 것이 표본을 늘리는 유일한 방법이다. 하루에 여러 번 돌려도
+# compare_rollup 이 (지점, 날짜)로 중복을 제거하므로 표본은 하루 1개다.
 REFERENCE_SPOTS = {
     "sokcho": {"lat": 38.2500, "lon": 128.5660, "windfinder": "sokcho",
                "regions": ["sokcho", "yangyang", "gangneung"]},
     "jeju":   {"lat": 33.5142, "lon": 126.5297, "windfinder": "jeju",
                "regions": ["jeju"]},
+    # 아래 둘은 2026-09-27 추가. 그전까지 pohang(5곳)·west_south(2곳)는
+    # 대조 지점이 없는데도 config.json 에 모델이 정해져 있었다.
+    "wolpo":   {"lat": 36.2031, "lon": 129.3713, "windfinder": "wolpo",
+                "regions": ["pohang"]},
+    "mallipo": {"lat": 36.7983, "lon": 126.1330, "windfinder": "mallipo",
+                "regions": ["west_south"]},
 }
+
+# busan(송정·다대포·광안리 3곳)은 아직 대조 지점이 없다. Windfinder 에
+# songjeong · dadaepo · gwangalli · haeundae · gijang · ilgwang · busan 이
+# 전부 404 다 (2026-09-27 확인). 이름이 다른 페이지가 있을 수 있으니
+# windfinder.com 에서 찾으면 위 형식으로 추가할 것 — 좌표는 페이지 HTML 의
+# lat/lon 값을 쓴다. 그때까지 busan 은 측정 근거 없이 기본 모델로 간다.
 
 CANDIDATE_MODELS = [
     "best_match",
