@@ -158,6 +158,37 @@ CANDIDATE_MODELS = [
 # 여기 없는 모델은 평균주기로 폴백하고 period_kind="mean" 으로 표시해 순위에서 뺀다.
 PEAK_PERIOD_MODELS = {"ecmwf_wam025", "ecmwf_wam", "cmems_peak"}
 
+# ── 순위는 안 내지만 원시값으로 받아 두는 변수 ──
+#
+# 대조 순위는 기준값(Windfinder)이 있는 파고·파주기로만 낼 수 있다.
+# Windfinder 예보 페이지에 있는 것은 파고·파주기·풍속·풍향·기온·기압뿐이고
+# **스웰/풍파 분리가 없다** (2026-09-27 셀 목록 확인). 그래서 아래 변수들은
+# 대조 상대가 없다.
+#
+# 그래도 받는 이유: Open-Meteo 는 과거 날짜에 그날 발표된 예보를 돌려주지 않아
+# **지금 안 받으면 그 날짜만큼 영구히 못 받는다.** 변수를 늘려도 API 콜 수는
+# 그대로다(한 요청에 함께 온다). 나중에 부이 관측 같은 기준이 생기거나
+# iOS 가 스웰·풍파를 화면에 쓰기 시작하면 이 원시값이 근거가 된다.
+#
+# jsonl 의 results[].extra 에 {변수: 8시각 값} 으로 들어간다. 순위·MAE 계산에는
+# 쓰지 않으므로 여기에 변수를 더 넣어도 판정 로직은 바뀌지 않는다.
+EXTRA_VARIABLES = [
+    # 스웰(먼바다에서 온 파) — 서핑 품질을 좌우하는 성분
+    "swell_wave_height", "swell_wave_period", "swell_wave_direction",
+    "secondary_swell_wave_height", "secondary_swell_wave_period",
+    "secondary_swell_wave_direction",
+    # 풍파(현장 바람이 만든 파) — 클수록 표면이 거칠다
+    "wind_wave_height", "wind_wave_period", "wind_wave_direction",
+    # 그 외
+    "sea_surface_temperature", "sea_level_height_msl",
+    "ocean_current_velocity", "ocean_current_direction",
+]
+
+# ⚠️ ecmwf 계열은 스웰·풍파를 아예 주지 않는다 (2026-09-27 실측, 전부 24개 None).
+# 파고 총합(wave_height)과 첨두주기(wave_peak_period)만 준다. 그래서
+# config.json 의 region_models 를 ecmwf 로 바꾸면 스웰·풍파 필드가 전부 빈다 —
+# 지금 구조(파고는 지역 모델, 첨두주기만 ecmwf)를 유지해야 하는 이유 하나가 이것이다.
+
 HOURS = [0, 3, 6, 9, 12, 15, 18, 21]
 
 # Windy가 쓰는 파랑 모델은 전부 Open-Meteo에도 있다. 같은 기관의 같은 모델이다.
@@ -203,7 +234,9 @@ def fetch(lat, lon, model, date, retries=3, timeout=25):
         # wave_period(평균주기)로 재면 축이 다른 값을 비교하게 된다.
         # 첨두를 안 주는 모델도 이 변수를 거부하지 않고 전부 None 으로 돌려주므로
         # 모델별로 분기할 필요가 없다 (2026-09-27 6모델 실측).
-        "hourly": "wave_height,wave_period,wave_peak_period,wave_direction",
+        "hourly": ",".join(
+            ["wave_height", "wave_period", "wave_peak_period", "wave_direction"]
+            + EXTRA_VARIABLES),
         "timezone": "Asia/Seoul",
         "start_date": date,
         "end_date": date,
@@ -305,7 +338,10 @@ def fetch_cmems(lat, lon, date, period_field):
 def fetch_series(lat, lon, model, date):
     """모델 하나의 그날 8개 시각.
 
-    반환 (heights, periods, period_kind, grid_lat, grid_lon, err)
+    반환 (heights, periods, period_kind, extra, grid_lat, grid_lon, err)
+
+    extra 는 {변수: 8시각 값} 이다. 순위에는 쓰지 않고 기록만 남긴다
+    (EXTRA_VARIABLES 주석 참조).
 
     period_kind 가 이 함수의 핵심이다. "peak" 면 첨두주기, "mean" 이면 평균주기다.
     Windfinder 기준값은 첨두주기이므로 "mean" 인 모델은 축이 다른 값이고,
@@ -317,18 +353,19 @@ def fetch_series(lat, lon, model, date):
         try:
             heights, periods, meta = fetch_cmems(lat, lon, date, CMEMS_MODELS[model])
         except Exception as exc:
-            return None, None, None, None, None, str(exc)
+            return None, None, None, None, None, None, str(exc)
         kind = "peak" if model in PEAK_PERIOD_MODELS else "mean"
-        return heights, periods, kind, meta["grid_lat"], meta["grid_lon"], None
+        # CMEMS 는 파랑 전용 제품이라 스웰·풍파·수온이 없다 (docs 참조)
+        return heights, periods, kind, {}, meta["grid_lat"], meta["grid_lon"], None
 
     data, err = fetch(lat, lon, model, date)
     if data is None:
-        return None, None, None, None, None, err
+        return None, None, None, None, None, None, err
 
     hourly = data.get("hourly", {})
     heights_all = series(hourly, "wave_height")
     if len(heights_all) <= max(HOURS):
-        return None, None, None, None, None, "자료 부족"
+        return None, None, None, None, None, None, "자료 부족"
 
     def pick(all_values):
         return [all_values[h] if h < len(all_values) else None for h in HOURS]
@@ -343,7 +380,16 @@ def fetch_series(lat, lon, model, date):
         periods, kind = pick(series(hourly, "wave_period")), "mean"
 
     heights = [heights_all[h] for h in HOURS]
-    return heights, periods, kind, data["latitude"], data["longitude"], None
+
+    # 원시값. 모델이 안 주는 변수는 8개 전부 None 이 되므로 그 변수는 빼고 담는다 —
+    # 안 그러면 jsonl 이 None 배열로 부풀기만 한다.
+    extra = {}
+    for name in EXTRA_VARIABLES:
+        values = pick(series(hourly, name))
+        if any(v is not None for v in values):
+            extra[name] = values
+
+    return heights, periods, kind, extra, data["latitude"], data["longitude"], None
 
 
 def main():
@@ -452,8 +498,8 @@ def main():
 
     results = []
     for model in models:
-        heights, periods, period_kind, glat, glon, err = fetch_series(
-            lat, lon, model, args.date)
+        (heights, periods, period_kind, extra,
+         glat, glon, err) = fetch_series(lat, lon, model, args.date)
         if err:
             print(f"\n{model}: 실패 — {err}")
             continue
@@ -471,6 +517,9 @@ def main():
             # "peak" = 첨두주기(Windfinder와 같은 축) · "mean" = 평균주기
             # 이 필드가 없는 기록은 첨두 도입(2026-09-27) 이전이라 전부 평균주기다.
             "period_kind": period_kind,
+            # 순위에 쓰지 않는 원시값. 기준값이 없어 대조는 못 하지만 소급해서
+            # 다시 받을 수 없으므로 지금 남긴다 (EXTRA_VARIABLES 주석).
+            "extra": extra,
             "grid": [glat, glon],
         }
 
@@ -515,6 +564,21 @@ def main():
                   for r in results if r["windy_equivalent"]]
         if legend:
             print(f"  * Windy 등가 모델: {' · '.join(legend)}")
+
+        # 원시값이 모델마다 크게 다르다 — ecmwf 계열은 스웰·풍파를 아예 안 준다.
+        # 순위와 무관하지만 "왜 저 모델엔 스웰이 없나"로 헤매지 않게 밝혀 둔다.
+        missing = [(r["model"], sorted(set(EXTRA_VARIABLES) - set(r.get("extra") or {})))
+                   for r in results]
+        lacking = [(m, miss) for m, miss in missing if miss]
+        if lacking:
+            print(f"\n  [원시값 · 순위와 무관] 받은 변수 수: " + " · ".join(
+                f"{r['model']} {len(r.get('extra') or {})}/{len(EXTRA_VARIABLES)}"
+                for r in results))
+            for m, miss in lacking:
+                if len(miss) == len(EXTRA_VARIABLES):
+                    print(f"    {m}: 전부 없음 (파고·첨두주기만 주는 모델)")
+                else:
+                    print(f"    {m}: 없음 — {', '.join(miss)}")
 
     def ranking(key, unit, bias_key=None, rows=None):
         ranked = sorted([r for r in (rows if rows is not None else results)
