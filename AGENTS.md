@@ -156,6 +156,15 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 지점은 `sokcho`, `jeju` 두 곳이 정의돼 있다(`REFERENCE_SPOTS`).
 `--out` 으로 누적해야 여러 날 비교가 쌓인다.
 
+> ⚠️ **파주기 결과는 지금 쓸 수 없다 (2026-09-27 확인).**
+> 이 스크립트가 요청하는 hourly 변수는 `wave_height,wave_period,wave_direction`
+> 뿐이다(`scripts/model_compare.py:152`). **`wave_peak_period` 가 없다.**
+> 기준값인 Windfinder는 첨두주기인데 모델값은 평균주기라 축이 다르다 —
+> `--models` 에 `ecmwf_wam025` 를 넣어도 첨두주기는 안 온다.
+> 수집 경로(`open_meteo.py`·`storage.py`)에는 첨두주기가 들어가 있는데
+> 검증 경로만 안 따라온 상태다. **파고 결과는 정상이다.**
+> 고치는 게 다음 작업 1순위 — `docs/marine-data-plan.md` 맨 위.
+
 ### Windy까지 3자 대조
 
 ```sh
@@ -308,6 +317,21 @@ rm ~/Library/LaunchAgents/com.dosurf.compare.plist
 
 `data/model_compare.jsonl` 초기 2건(2026-08-30)은 편향·상관 분리 이전 스키마라
 MAE만 있다. 롤업이 그 날짜 수를 따로 알려주고 편향제거 평균에서 제외한다.
+
+**2026-09-27 집계 결과 — 파고는 결론이 났다. 다시 재지 말 것.**
+
+sokcho 24일·jeju 22일을 쌓아도 1위가 안 굳는다(득표 48%·45%). 1·2위 편향제거
+MAE 차이가 측정 노이즈보다 작다(sokcho 0.039 vs 0.040). 더 쌓아서 바뀔 성질이
+아니라 **후보 모델들이 실질적으로 같은 정확도**라는 뜻이다. `config.json` 의
+현재 선택을 유지한다.
+
+보정계수도 못 넣는다 — sokcho는 편향이 -0.009로 애초에 없고, jeju는 편향 -0.201에
+편향σ 0.172로 「σ < |편향|/2」 규칙에 걸린다. 수치 전체는
+[`개발로그/2026-09-27.md`](./개발로그/2026-09-27.md).
+
+`--reference windy` 는 **집계할 값이 없다.** 54건 전부 `reference_windy: null`
+이다 — 아래 「매일 자동으로 표본 쌓기」대로 자동 수집이 Windy를 안 받기 때문이고
+설계대로다. 쓰려면 사람이 `--reference-windy` 로 며칠치를 채워야 한다.
 
 ### ⚠️ 수집을 돌리면 데이터가 지워진다
 
