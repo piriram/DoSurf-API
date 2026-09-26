@@ -21,9 +21,15 @@ LOGDIR="$REPO/data/compare_log"
 SPOTS=(sokcho jeju)
 
 # 파고 후보 전체 + 첨두주기를 주는 ecmwf 계열.
+#
+# ecmwf_wam 을 ecmwf_wam025 와 함께 넣는다. 첨두주기(wave_peak_period)를 값으로
+# 주는 Open-Meteo 모델이 이 둘뿐이라(2026-09-27 실측), 하나만 넣으면 파주기에
+# 비교 대상이 없어 순위가 성립하지 않는다. 격자도 다르게 스냅된다 -
+# 속초에서 ecmwf_wam 6.9km vs ecmwf_wam025 16.1km.
+#
 # cmems 는 뺐다 - 자격증명이 만료되면 조용히 실패하고, 파고에서 이기지도 않았다.
 # 필요하면 손으로 --models 에 cmems,cmems_peak 를 붙여 돌린다.
-MODELS="best_match,ncep_gfswave025,ncep_gfswave016,ecmwf_wam025,gwam,meteofrance_wave"
+MODELS="best_match,ncep_gfswave025,ncep_gfswave016,ecmwf_wam025,ecmwf_wam,gwam,meteofrance_wave"
 
 mkdir -p "$LOGDIR"
 today=$(date +%F)

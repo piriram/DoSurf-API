@@ -31,6 +31,7 @@ Windfinder 값은 `--from-windfinder` 로 자동 수집된다 (scripts/windfinde
 직접 넣으려면 windfinder.com/forecast/<spot>에서 해당 날짜의 wave height를
 00,03,06,09,12,15,18,21시 순서로 읽어 --reference에 넣을 것.
 파주기(period)도 같은 시각 순서로 읽어 --reference-period에 넣는다.
+Windfinder 페이지의 파주기는 첨두주기이므로, 모델 쪽도 첨두로 재야 축이 맞는다.
 
 ── Windy는 왜 수동인가 ──
 
@@ -54,6 +55,27 @@ Windy가 화면에 쓰는 그 모델이고, Windy 값과 그 모델의 차이가
 
 파고와 파주기는 순위를 따로 매긴다. 파고로 고른 모델이 파주기까지 맞는다는
 보장이 없기 때문이다 (docs/marine-data-audit.md). 1위가 갈리면 그렇다고 알린다.
+
+── 파주기는 첨두(peak)끼리만 비교한다 ──
+
+기준값인 Windfinder가 화면에 쓰는 파주기는 **첨두주기**(peak period)다.
+Open-Meteo 의 `wave_period` 는 평균주기 계열이라 정의가 다르고 구조적으로 작다
+(제주 대조에서 Windfinder 8.0초 대비 평균 MAE 2.6~3.1초, 첨두 1.08초).
+
+그래서 이 스크립트는 `wave_peak_period` 를 함께 요청하고, 값이 오는 모델은
+첨두로 잰다. 안 오는 모델은 평균으로 폴백하되 어느 쪽을 썼는지
+`period_kind`("peak"/"mean")에 남기고 **파주기 순위에서 뺀다.**
+섞어서 줄을 세우면 "평균주기 모델이 이겼다"는 가짜 결론이 나온다 —
+2026-09-27 전까지 4주간 쌓인 파주기 순위가 실제로 그 상태였다.
+
+첨두주기를 값으로 돌려주는 모델은 현재 `ecmwf_wam025` · `ecmwf_wam` ·
+`cmems_peak` 뿐이다 (2026-09-27 6모델 실측). 나머지는 변수를 거부하지 않고
+24개 전부 None 으로 돌려준다. 그래서 파주기 순위의 후보 수는 파고보다 적고,
+파고 1위와 달라지는 것이 정상이다 — 수집 경로도 파주기만 별도 모델에서 받는다
+(`open_meteo.py` 세 번째 호출 · `config.json` 의 `peak_period_model`).
+
+`period_kind` 가 없는 기록은 이 변경(2026-09-27) 이전이라 전부 평균주기다.
+`compare_rollup.py` 가 그 날들을 파주기 집계에서 분리한다.
 
 ── MAE만 보면 안 되는 이유 ──
 
@@ -105,8 +127,15 @@ CANDIDATE_MODELS = [
     "ncep_gfswave016",
     "gwam",
     "ecmwf_wam025",
+    "ecmwf_wam",
     "meteofrance_wave",
 ]
+
+# 첨두주기(wave_peak_period)를 실제로 값으로 돌려주는 모델.
+# 나머지는 변수를 받아주기는 하되 24개 전부 None 이다 (2026-09-27 실측).
+# 기준값인 Windfinder가 첨두주기이므로, 파주기 순위는 이 모델들끼리만 의미가 있다.
+# 여기 없는 모델은 평균주기로 폴백하고 period_kind="mean" 으로 표시해 순위에서 뺀다.
+PEAK_PERIOD_MODELS = {"ecmwf_wam025", "ecmwf_wam", "cmems_peak"}
 
 HOURS = [0, 3, 6, 9, 12, 15, 18, 21]
 
@@ -149,7 +178,11 @@ def fetch(lat, lon, model, date, retries=3, timeout=25):
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "wave_height,wave_period,wave_direction",
+        # wave_peak_period 를 반드시 함께 받는다. 기준값인 Windfinder가 첨두주기라
+        # wave_period(평균주기)로 재면 축이 다른 값을 비교하게 된다.
+        # 첨두를 안 주는 모델도 이 변수를 거부하지 않고 전부 None 으로 돌려주므로
+        # 모델별로 분기할 필요가 없다 (2026-09-27 6모델 실측).
+        "hourly": "wave_height,wave_period,wave_peak_period,wave_direction",
         "timezone": "Asia/Seoul",
         "start_date": date,
         "end_date": date,
@@ -249,7 +282,13 @@ def fetch_cmems(lat, lon, date, period_field):
 
 
 def fetch_series(lat, lon, model, date):
-    """모델 하나의 그날 8개 시각. 반환 (heights, periods, grid_lat, grid_lon, err)
+    """모델 하나의 그날 8개 시각.
+
+    반환 (heights, periods, period_kind, grid_lat, grid_lon, err)
+
+    period_kind 가 이 함수의 핵심이다. "peak" 면 첨두주기, "mean" 이면 평균주기다.
+    Windfinder 기준값은 첨두주기이므로 "mean" 인 모델은 축이 다른 값이고,
+    파주기 순위에 섞으면 안 된다. 어느 쪽을 썼는지 기록에 남기려고 돌려준다.
 
     Open-Meteo든 CMEMS든 이 함수 밖에서는 구분하지 않는다.
     """
@@ -257,22 +296,33 @@ def fetch_series(lat, lon, model, date):
         try:
             heights, periods, meta = fetch_cmems(lat, lon, date, CMEMS_MODELS[model])
         except Exception as exc:
-            return None, None, None, None, str(exc)
-        return heights, periods, meta["grid_lat"], meta["grid_lon"], None
+            return None, None, None, None, None, str(exc)
+        kind = "peak" if model in PEAK_PERIOD_MODELS else "mean"
+        return heights, periods, kind, meta["grid_lat"], meta["grid_lon"], None
 
     data, err = fetch(lat, lon, model, date)
     if data is None:
-        return None, None, None, None, err
+        return None, None, None, None, None, err
 
     hourly = data.get("hourly", {})
     heights_all = series(hourly, "wave_height")
-    periods_all = series(hourly, "wave_period")
     if len(heights_all) <= max(HOURS):
-        return None, None, None, None, "자료 부족"
+        return None, None, None, None, None, "자료 부족"
+
+    def pick(all_values):
+        return [all_values[h] if h < len(all_values) else None for h in HOURS]
+
+    # 첨두주기가 실제로 값으로 왔으면 그걸 쓴다. 안 주는 모델은 변수 자체는
+    # 응답에 있지만 전부 None 이므로, 유효값 유무로 판정한다 — 모델 목록에
+    # 의존하지 않아서 Open-Meteo 가 나중에 다른 모델에 첨두를 붙여도 따라간다.
+    peak = pick(series(hourly, "wave_peak_period"))
+    if any(v is not None for v in peak):
+        periods, kind = peak, "peak"
+    else:
+        periods, kind = pick(series(hourly, "wave_period")), "mean"
 
     heights = [heights_all[h] for h in HOURS]
-    periods = [periods_all[h] if h < len(periods_all) else None for h in HOURS]
-    return heights, periods, data["latitude"], data["longitude"], None
+    return heights, periods, kind, data["latitude"], data["longitude"], None
 
 
 def main():
@@ -381,7 +431,8 @@ def main():
 
     results = []
     for model in models:
-        heights, periods, glat, glon, err = fetch_series(lat, lon, model, args.date)
+        heights, periods, period_kind, glat, glon, err = fetch_series(
+            lat, lon, model, args.date)
         if err:
             print(f"\n{model}: 실패 — {err}")
             continue
@@ -396,6 +447,9 @@ def main():
             "windy_equivalent": WINDY_EQUIVALENT.get(model),
             "snap_km": round(dist, 1),
             "heights": heights, "periods": periods,
+            # "peak" = 첨두주기(Windfinder와 같은 축) · "mean" = 평균주기
+            # 이 필드가 없는 기록은 첨두 도입(2026-09-27) 이전이라 전부 평균주기다.
+            "period_kind": period_kind,
             "grid": [glat, glon],
         }
 
@@ -420,25 +474,30 @@ def main():
     def render(suffix, name):
         """한 기준에 대한 표. 컬럼 구성은 기준이 달라도 같다."""
         header = (f"{'모델':<20}{'격자거리':>9}{'MAE':>9}{'편향':>9}"
-                  f"{'편향제거':>9}{'상관':>9}{'MAE주기':>9}")
+                  f"{'편향제거':>9}{'상관':>9}{'MAE주기':>9}{'주기축':>8}")
         print(f"\n=== vs {name} ===")
         print(header)
         print("-" * max(len(header), 84))
         for r in results:
             mark = " *" if r["windy_equivalent"] else ""
+            # 주기축을 같은 줄에 찍는다. 첨두(peak)만 Windfinder와 같은 축이고
+            # 평균(mean)은 구조적으로 작게 나오므로 MAE주기를 나란히 읽으면 안 된다.
+            axis = "첨두" if r.get("period_kind") == "peak" else "평균"
             print(f"{r['model'] + mark:<20}{r['snap_km']:>8.1f}k"
                   f"{cell(r[f'mae{suffix}'])}"
                   f"{cell(r[f'bias{suffix}'], '{:+.3f}')}"
                   f"{cell(r[f'mae_debiased{suffix}'])}"
                   f"{cell(r[f'corr{suffix}'], '{:.4f}')}"
-                  f"{cell(r[f'mae_period{suffix}'], '{:.2f}')}")
+                  f"{cell(r[f'mae_period{suffix}'], '{:.2f}')}"
+                  f"{axis:>7}")
         legend = [f"{r['model']}={r['windy_equivalent']}"
                   for r in results if r["windy_equivalent"]]
         if legend:
             print(f"  * Windy 등가 모델: {' · '.join(legend)}")
 
-    def ranking(key, unit, bias_key=None):
-        ranked = sorted([r for r in results if r.get(key) is not None],
+    def ranking(key, unit, bias_key=None, rows=None):
+        ranked = sorted([r for r in (rows if rows is not None else results)
+                         if r.get(key) is not None],
                         key=lambda r: r[key])
         for i, r in enumerate(ranked, 1):
             extra = ""
@@ -485,9 +544,35 @@ def main():
                 print("     경향성 판단 불가. 파고가 변하는 날 다시 잴 것.")
 
         if ref_p:
-            print("\n[파주기 · 편향 제거 후]")
-            ranked_p = ranking(f"mae_period_debiased{suffix}", "s")
-            best_p = ranked_p[0]["model"] if ranked_p else None
+            # ── 첨두주기만 순위에 넣는다 ──
+            # 기준값(Windfinder·서핑 앱 화면)은 첨두주기다. 평균주기는 정의가
+            # 다른 값이라 구조적으로 작게 나오고, 같은 표에서 줄을 세우면
+            # "평균주기 모델이 이겼다"는 가짜 결론이 나온다. 실제로 2026-09-27
+            # 전까지 4주간 쌓인 파주기 순위가 그 상태였다.
+            peak_rows = [r for r in results if r.get("period_kind") == "peak"]
+            mean_rows = [r for r in results
+                         if r.get("period_kind") == "mean"
+                         and r.get(f"mae_period_debiased{suffix}") is not None]
+
+            print("\n[파주기 · 첨두주기 모델만 · 편향 제거 후]")
+            if peak_rows:
+                ranked_p = ranking(f"mae_period_debiased{suffix}", "s",
+                                   rows=peak_rows)
+                best_p = ranked_p[0]["model"] if ranked_p else None
+                if len(ranked_p) < 2:
+                    print("  ⚠️ 첨두주기를 주는 모델이 하나뿐이라 순위가 성립하지 않는다.")
+                    print("     비교하려면 --models 에 ecmwf_wam 또는 cmems_peak 를 넣을 것.")
+            else:
+                print("  ⚠️ 첨두주기를 주는 모델이 후보에 없다.")
+                print("     --models 에 ecmwf_wam025 · ecmwf_wam · cmems_peak 중 하나를 넣을 것.")
+
+            if mean_rows:
+                names = " · ".join(r["model"] for r in mean_rows)
+                print(f"\n  (평균주기 모델은 순위에서 뺐다: {names})")
+                print(f"   {name} 기준이 첨두주기라 축이 다르다 — 참고로만 볼 값이다.")
+                for r in sorted(mean_rows,
+                                key=lambda r: r[f"mae_period_debiased{suffix}"]):
+                    print(f"     {r[f'mae_period_debiased{suffix}']:.3f}s  {r['model']}")
 
         # 열린 질문: 파고로 고른 모델이 파주기까지 맞는가 (docs/marine-data-audit.md)
         if best_h and best_p:
@@ -495,8 +580,10 @@ def main():
                 print(f"\n두 기준의 1위가 같다: {best_h}")
             else:
                 print(f"\n⚠️ 1위가 갈린다 — 파고 {best_h} / 파주기 {best_p}")
-                print("   한 모델로 둘 다 만족시킬 수 없다는 뜻이므로,")
-                print("   파주기를 화면에 노출하기 전에 표본을 더 쌓을 것.")
+                print("   파주기 후보는 첨두주기를 주는 모델뿐이므로(현재 ecmwf 계열),")
+                print("   파고 1위와 달라지는 것이 정상이다. 한 모델로 둘 다 맞추려 하지 말고")
+                print("   파주기만 다른 모델에서 받는 지금 수집 구조를 유지할 것")
+                print("   (open_meteo.py 세 번째 호출 · config.json peak_period_model).")
         winners[name] = best_h
 
     # ── Windfinder와 Windy가 서로 다른 모델을 고르면 ──
@@ -521,6 +608,10 @@ def main():
         record = {
             "label": label, "lat": lat, "lon": lon, "date": args.date,
             "reference": reference, "reference_period": reference_period,
+            # 기준값의 주기 축. Windfinder 예보 페이지가 화면에 쓰는 값이
+            # 첨두주기이므로 "peak" 이다. 모델 쪽 period_kind 와 이 값이 같은
+            # 기록만 파주기 집계에 쓸 수 있다 (compare_rollup.py).
+            "reference_period_kind": "peak" if reference_period else None,
             "reference_windy": reference_windy,
             "reference_windy_period": reference_windy_period,
             "cross_windy_vs_windfinder": cross,

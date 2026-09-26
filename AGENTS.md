@@ -107,7 +107,7 @@ export KMA_API_KEY=$(python3 -c "import json;print(json.load(open('<인계폴더
   `models` 지정 시 빠지는 수온·조석을 폴백 모델로 한 번 더 채운다.
   결과에 `marine_source.fallback_fields: ['sea_surface_temperature', 'sea_level_height_msl']`
   가 남는다.
-- **첨두주기는 `ecmwf_wam025`/`ecmwf_wam` 만 준다** (2026-08-30 실측).
+- **첨두주기는 `ecmwf_wam025`/`ecmwf_wam` 만 준다** (2026-08-30 실측, 2026-09-27 재확인).
   `best_match`·`ncep_gfswave025/016`·`gwam`·`meteofrance_wave` 는 `wave_peak_period`
   를 받아주기는 하되 값을 전부 `None` 으로 돌려준다. 폴백(`best_match`)으로도
   못 받으므로 **세 번째 호출**을 따로 한다.
@@ -156,14 +156,22 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 지점은 `sokcho`, `jeju` 두 곳이 정의돼 있다(`REFERENCE_SPOTS`).
 `--out` 으로 누적해야 여러 날 비교가 쌓인다.
 
-> ⚠️ **파주기 결과는 지금 쓸 수 없다 (2026-09-27 확인).**
-> 이 스크립트가 요청하는 hourly 변수는 `wave_height,wave_period,wave_direction`
-> 뿐이다(`scripts/model_compare.py:152`). **`wave_peak_period` 가 없다.**
-> 기준값인 Windfinder는 첨두주기인데 모델값은 평균주기라 축이 다르다 —
-> `--models` 에 `ecmwf_wam025` 를 넣어도 첨두주기는 안 온다.
-> 수집 경로(`open_meteo.py`·`storage.py`)에는 첨두주기가 들어가 있는데
-> 검증 경로만 안 따라온 상태다. **파고 결과는 정상이다.**
-> 고치는 게 다음 작업 1순위 — `docs/marine-data-plan.md` 맨 위.
+**파주기는 첨두(peak)끼리만 비교한다.** 기준값인 Windfinder가 화면에 쓰는 값이
+첨두주기라서다. 이 스크립트는 `wave_peak_period` 를 함께 요청하고, 값이 오는
+모델은 첨두로 재고 안 오는 모델은 평균주기로 폴백한다. 어느 쪽을 썼는지는
+기록의 `period_kind`(`"peak"`/`"mean"`)와 출력의 `주기축` 열에 남는다.
+**평균주기 모델은 파주기 순위에서 뺀다** — 정의가 다른 값이라 구조적으로
+작게 나오고, 섞으면 "평균주기 모델이 이겼다"는 가짜 결론이 된다.
+
+**첨두주기를 주는 모델은 `ecmwf_wam025` · `ecmwf_wam` · `cmems_peak` 뿐이다**
+(2026-09-27 6모델 실측). 나머지는 변수를 거부하지 않고 24개 전부 `None` 으로
+돌려준다. 그래서 파주기 후보 수가 파고보다 적고, **파고 1위와 갈리는 게 정상이다** —
+수집 경로도 파주기만 별도 모델에서 받는다(`config.json` 의 `peak_period_model`).
+
+> ⚠️ **2026-09-27 이전 기록 54건은 파주기가 평균주기 축이다.**
+> 그때는 이 스크립트가 `wave_peak_period` 를 요청하지 않았다. 롤업이
+> `period_kind` 유무로 그 날들을 파주기 집계에서 분리하고 몇 날인지 알려준다.
+> **그 날들의 파주기 순위는 근거로 쓸 수 없다.** 파고 결과는 영향 없다.
 
 ### Windy까지 3자 대조
 
@@ -286,6 +294,8 @@ tail -30 data/compare_log/$(date +%F).log
   필요가 없고, 맥이 켜져 있을 시간을 고른 것이다. 꺼져 있으면 launchd가 다음
   기상 때 한 번 밀어서 실행한다
 - 대상은 `sokcho`, `jeju`. 결과는 `data/model_compare.jsonl` 에 append
+- 모델 목록에 **`ecmwf_wam025` 와 `ecmwf_wam` 둘 다** 들어 있다. 첨두주기를 주는
+  모델이 이 둘뿐이라, 하나만 넣으면 파주기에 비교 대상이 없어 순위가 성립하지 않는다
 - **종료코드만 믿지 않는다.** Windfinder 파싱이 깨지면 기준값이 비어도 스크립트는
   정상 종료한다. 그래서 "기록 추가" 문구가 실제로 찍혔는지 확인한 뒤 실패로 센다
 - `cmems` 는 뺐다 — 자격증명이 만료되면 조용히 실패하고 파고에서 이기지도 않았다.
@@ -314,6 +324,9 @@ rm ~/Library/LaunchAgents/com.dosurf.compare.plist
 - 표본 5일 미만 → 결론 보류
 - 1위가 날마다 바뀌고 최다 득표가 60% 미만 → 아직 노이즈. 더 쌓을 것
 - 편향 표준편차가 편향 절댓값의 절반 미만 → 상수 보정계수 후보. 아니면 상수화 금지
+- **파주기는 첨두주기(`period_kind: "peak"`)로 잰 날만 집계한다.** 평균주기로
+  기록된 날은 축이 달라 따로 세고 순위에서 뺀다. 2026-09-27 이전 54건이 전부
+  그쪽이라 파주기 표본은 실질적으로 그날부터 다시 시작이다
 
 `data/model_compare.jsonl` 초기 2건(2026-08-30)은 편향·상관 분리 이전 스키마라
 MAE만 있다. 롤업이 그 날짜 수를 따로 알려주고 편향제거 평균에서 제외한다.

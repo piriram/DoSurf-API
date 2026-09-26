@@ -84,7 +84,8 @@ def collect(records, label, suffix):
     per_model = {}
     daily_best = []
     dates = set()
-    legacy_days = 0   # 편향·상관 분리(2026-08) 이전에 기록된 날
+    legacy_days = 0        # 편향·상관 분리(2026-08) 이전에 기록된 날
+    mean_period_days = 0   # 파주기를 평균주기 축으로 잰 날 (첨두 도입 2026-09-27 이전)
 
     for rec in records:
         if rec.get("label") != label:
@@ -99,21 +100,37 @@ def collect(records, label, suffix):
         has_debiased = any(r.get(f"mae_debiased{suffix}") is not None for r in rows)
         if not has_debiased:
             legacy_days += 1
+        # 파주기 축은 기록 시점에 따라 다르다. period_kind 가 없으면 첨두 도입
+        # (2026-09-27) 이전이라 전부 평균주기다 — 첨두와 섞으면 결론이 뒤집힌다.
+        if not any(r.get("period_kind") for r in rows):
+            if any(r.get(f"mae_period_debiased{suffix}") is not None for r in rows):
+                mean_period_days += 1
         for r in rows:
             acc = per_model.setdefault(r["model"], {
                 "mae": [], "bias": [], "mae_debiased": [], "corr": [],
                 "mae_period_debiased": [], "bias_period": [], "snap_km": [],
+                "period_mean_days": 0,
                 "windy_equivalent": r.get("windy_equivalent"),
             })
             for key, src in (("mae", f"mae{suffix}"),
                              ("bias", f"bias{suffix}"),
                              ("mae_debiased", f"mae_debiased{suffix}"),
-                             ("corr", f"corr{suffix}"),
-                             ("mae_period_debiased", f"mae_period_debiased{suffix}"),
-                             ("bias_period", f"bias_period{suffix}")):
+                             ("corr", f"corr{suffix}")):
                 value = r.get(src)
                 if value is not None:
                     acc[key].append(value)
+
+            # ── 파주기는 첨두(peak)로 잰 것만 쌓는다 ──
+            # 기준값(Windfinder)이 첨두주기이므로 평균주기로 잰 날은 축이 다르다.
+            # 버리지 않고 날 수만 세어 report() 가 몇 날이 그랬는지 밝힌다.
+            period_value = r.get(f"mae_period_debiased{suffix}")
+            if period_value is not None:
+                if r.get("period_kind") == "peak":
+                    acc["mae_period_debiased"].append(period_value)
+                    if r.get(f"bias_period{suffix}") is not None:
+                        acc["bias_period"].append(r[f"bias_period{suffix}"])
+                else:
+                    acc["period_mean_days"] += 1
             if r.get("snap_km") is not None:
                 acc["snap_km"].append(r["snap_km"])
             # 예전 기록엔 windy_equivalent 가 없다. 나중 기록에서 채워지면 쓴다.
@@ -128,7 +145,8 @@ def collect(records, label, suffix):
         if best:
             daily_best.append((rec.get("date"), best["model"], best[key]))
 
-    return per_model, daily_best, sorted(d for d in dates if d), legacy_days
+    return (per_model, daily_best, sorted(d for d in dates if d),
+            legacy_days, mean_period_days)
 
 
 def cross_summary(records, label):
@@ -146,7 +164,8 @@ def cross_summary(records, label):
     }
 
 
-def report(label, per_model, daily_best, dates, ref_name, cross, legacy_days=0):
+def report(label, per_model, daily_best, dates, ref_name, cross,
+           legacy_days=0, mean_period_days=0):
     print(f"\n{'=' * 78}")
     print(f"{label}  ·  기준 {ref_name}  ·  {len(dates)}일 "
           f"({dates[0]} ~ {dates[-1]})" if dates else f"{label}  ·  기준 {ref_name}")
@@ -236,14 +255,49 @@ def report(label, per_model, daily_best, dates, ref_name, cross, legacy_days=0):
         else:
             print("  편향이 작다. 보정계수 불필요.")
 
+    # ── 파주기: 첨두주기로 잰 날만 쓴다 ──
+    # 기준값(Windfinder)이 첨두주기다. 평균주기로 잰 날을 섞으면 축이 다른 값이
+    # 한 평균에 들어가고, 정의 차이가 모델 차이로 보인다.
     period_rows = [(m, a) for m, a in ranked if a["mae_period_debiased"]]
-    if period_rows:
+    mean_only = [(m, a) for m, a in ranked
+                 if not a["mae_period_debiased"] and a.get("period_mean_days")]
+
+    print("\n[파주기 · 첨두주기로 잰 날만]")
+    if mean_period_days:
+        print(f"  ⚠️ {mean_period_days}일치는 평균주기 축으로 기록됐다 "
+              f"(첨두 도입 2026-09-27 이전).")
+        print("     축이 달라 집계에서 뺐다. 그 날들의 파주기 순위는 근거로 쓸 수 없다.")
+
+    if not period_rows:
+        print("  첨두주기로 잰 기록이 아직 없다.")
+        print("  daily_compare.sh 가 매일 쌓는다 — --models 에 ecmwf_wam025·ecmwf_wam 가")
+        print("  들어 있어야 한다. 결론까지 최소 "
+              f"{MIN_SAMPLES}일.")
+    else:
+        for model, acc in sorted(period_rows,
+                                 key=lambda kv: mean(kv[1]["mae_period_debiased"])):
+            values = acc["mae_period_debiased"]
+            bias_avg = mean(acc["bias_period"])
+            bias_txt = f" · 편향 {bias_avg:+.2f}s" if bias_avg is not None else ""
+            print(f"    {mean(values):.3f}s  {model}  ({len(values)}일{bias_txt})")
+
         best_p = min(period_rows, key=lambda kv: mean(kv[1]["mae_period_debiased"]))
-        print(f"\n[파주기] 1위 {best_p[0]} — "
-              f"편향제거 MAE {mean(best_p[1]['mae_period_debiased']):.3f}s "
-              f"({len(best_p[1]['mae_period_debiased'])}일)")
-        if best_p[0] != top_model:
-            print(f"  ⚠️ 파고 1위({top_model})와 다르다. 한 모델로 둘 다 못 맞춘다.")
+        n_p = len(best_p[1]["mae_period_debiased"])
+        if n_p < MIN_SAMPLES:
+            print(f"  → 표본 {n_p}일. {MIN_SAMPLES}일 미만이라 파주기 결론 보류.")
+        elif len(period_rows) < 2:
+            print(f"  → 1위 {best_p[0]} — 다만 비교 대상이 하나뿐이라 순위가 아니다.")
+        else:
+            print(f"  → 1위 {best_p[0]} ({n_p}일)")
+
+        if mean_only:
+            names = " · ".join(m for m, _ in mean_only)
+            print(f"  (평균주기만 주는 모델은 제외: {names})")
+
+        if period_rows and best_p[0] != top_model:
+            print(f"  파고 1위는 {top_model} 다. 첨두주기를 주는 모델이 ecmwf 계열뿐이라")
+            print("  갈리는 게 정상이고, 수집도 파주기만 별도 모델에서 받고 있다")
+            print("  (config.json 의 peak_period_model).")
 
 
 def main():
@@ -269,14 +323,15 @@ def main():
 
     printed = 0
     for label in labels:
-        per_model, daily_best, dates, legacy_days = collect(records, label, suffix)
+        (per_model, daily_best, dates,
+         legacy_days, mean_period_days) = collect(records, label, suffix)
         if not per_model:
             print(f"\n{label}: 기준 {ref_name} 로 집계할 값이 없다.")
             if args.reference == "windy":
                 print("  model_compare.py 에 --reference-windy 를 주고 다시 쌓을 것.")
             continue
         report(label, per_model, daily_best, dates, ref_name,
-               cross_summary(records, label), legacy_days)
+               cross_summary(records, label), legacy_days, mean_period_days)
         printed += 1
 
     if printed == 0:
