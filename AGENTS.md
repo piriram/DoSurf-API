@@ -164,22 +164,35 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 
 ### ⚠️ 대조 지점 좌표는 해변 좌표가 아니다
 
-대조는 Windfinder 지점 좌표로 하고, 실제 수집은 `locations.json` 의 해변 좌표로
-한다. **둘이 다르고, 대부분 Open-Meteo 격자도 다르다** (2026-09-27 실측,
-`ncep_gfswave016` 기준).
+대조는 Windfinder 지점 좌표로 하고, 실제 수집은 `locations.json` 의 해변 좌표를
+`latlon_to_xy()`(기상청 격자)와 `fetch_marine()`(Open-Meteo)에 그대로 넘긴다
+(`app/services/collection.py:75` · `:131`). **둘이 다르고, 대부분 Open-Meteo
+격자도 다르다.**
 
-| 지역 | 해변 | 담당 대조지점 | 격자일치 | 최대거리 |
-|---|---|---|---|---|
-| busan | 3 | — 없음 — | 0/3 | — |
-| gangneung | 7 | donghae · sokcho | 1/7 | 43.8km |
-| jeju | 6 | hamdok · jeju · seogwipo | 1/6 | 23.8km |
-| pohang | 5 | ulsan · wolpo | 3/5 | 23.8km |
-| sokcho | 3 | sokcho | 1/3 | 16.1km |
-| west_south | 2 | mallipo · yeosu | 1/2 | 32.2km |
-| yangyang | 6 | gisamun | **6/6** | 4.5km |
+아래는 2026-09-27에 **운영 Firestore 의 `marine_source.grid_lat/grid_lon` 를
+읽어** 대조 지점의 격자와 맞대본 것이다. 문서 추측이 아니라 실제 수집값이다.
 
-합계 13/32곳만 같은 격자다. 지점 추가 전에는 6/29였고 거리 중앙값이 26.8km였다
-(지금 11.7km).
+| 지역 | 수집 모델 | 해변 | 담당 대조지점 | 격자일치 | 수집스냅 중앙 | 지점거리 최대 |
+|---|---|---|---|---|---|---|
+| busan | best_match | 3 | — 없음 — | 0/3 | 3.2km | — |
+| gangneung | ncep_gfswave016 | 7 | donghae · sokcho | 1/7 | 9.1km | 43.8km |
+| jeju | best_match | 6 | hamdok · jeju · seogwipo | 2/6 | 16.9km | 23.8km |
+| pohang | ncep_gfswave016 | 5 | ulsan · wolpo | 3/5 | 14.8km | 23.8km |
+| sokcho | ncep_gfswave016 | 3 | sokcho | 1/3 | 12.2km | 16.1km |
+| west_south | best_match | 2 | mallipo · yeosu | 1/2 | 4.3km | 32.2km |
+| yangyang | ncep_gfswave016 | 6 | gisamun | **6/6** | 7.7km | 4.5km |
+
+합계 14/32곳만 같은 격자다. 지점 추가 전에는 sokcho 가 동해안 16곳을 대표하며
+그중 15곳이 격자가 달랐다.
+
+**격자 비교는 그 지역이 실제 쓰는 모델로 해야 한다.** 모델마다 격자 해상도가
+다르다 — `best_match` 는 `(33.208336, 126.29167)` 처럼 촘촘하고(수집 스냅
+0.62~8.7km), `ncep_gfswave016` 은 `(38.0, 128.83334)` 처럼 1/6도 간격이다
+(스냅 3.45~18.6km). 한 모델로 전 지역을 계산하면 jeju·west_south·busan 이
+틀리게 나온다.
+
+**수집 자체는 해변에서 가깝다** — 스냅거리 중앙값 8.7km · 최대 18.6km(함덕).
+문제는 수집이 먼 격자를 쓰는 게 아니라 **대조 지점과 다른 격자를 쓰는 것**이다.
 
 **그래서 무엇을 믿고 무엇을 믿지 않나.** 모델 **선택**(어느 모델이 이 해역에서
 더 정확한가)은 모델의 체계적 특성이라 인접 격자로 어느 정도 전이된다.
