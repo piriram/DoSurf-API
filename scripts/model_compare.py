@@ -134,6 +134,23 @@ REFERENCE_SPOTS = {
                 "regions": ["pohang"]},
     "mallipo": {"lat": 36.7983, "lon": 126.1330, "windfinder": "mallipo",
                 "regions": ["west_south"]},
+
+    # ── 제주는 한 지점으로 대표할 수 없다 (2026-09-27 추가) ──
+    # locations.json 의 제주 6곳이 남(33.22)부터 북동(33.56)까지 흩어져 있고,
+    # 남쪽은 태평양 스웰을, 북쪽은 서해·남해 쪽을 받는다. 기존 "jeju"
+    # (33.5142/126.5297)는 제주시 북서라 사계·중문 같은 남쪽 서핑 스팟과 멀다.
+    "seogwipo": {"lat": 33.2533, "lon": 126.5618,
+                 "windfinder": "seogwipo_jeju-do_south_korea",
+                 "regions": ["jeju"]},        # 남부 — 사계·중문 쪽
+    "hamdok":   {"lat": 33.5424, "lon": 126.6707,
+                 "windfinder": "hamdok_ri_beach",
+                 "regions": ["jeju"]},        # 북동 — 함덕해변과 0.2km
+
+    # 남해안. locations.json 의 고흥 남열(34.5768/127.4375)에서 약 35km 로
+    # 가장 가깝다. windfinder 에 namyeol · goheung · wando · narodo · namhae ·
+    # geoje 는 없다 (2026-09-27 확인).
+    "yeosu":    {"lat": 34.7333, "lon": 127.7333, "windfinder": "yeosu",
+                 "regions": ["west_south"]},
 }
 
 # busan(송정·다대포·광안리 3곳)은 아직 대조 지점이 없다. Windfinder 에
@@ -447,7 +464,12 @@ def main():
                                              "--reference-windy-period")
 
     if args.from_windfinder:
-        wf_spot = args.from_windfinder if isinstance(args.from_windfinder, str) else args.spot
+        # --spot 이름과 Windfinder slug 는 다를 수 있다 (seogwipo 는 페이지가
+        # seogwipo_jeju-do_south_korea 다). REFERENCE_SPOTS 의 windfinder 필드가
+        # 그 매핑인데 여기서 쓰이지 않아 짧은 이름만 동작하던 상태였다.
+        wf_spot = args.from_windfinder if isinstance(args.from_windfinder, str) else None
+        if wf_spot is None and args.spot:
+            wf_spot = REFERENCE_SPOTS[args.spot].get("windfinder", args.spot)
         if not wf_spot:
             ap.error("--from-windfinder 에 지점 이름을 주거나 --spot 을 함께 쓰세요")
         # 직접 준 값이 있으면 그쪽을 존중한다

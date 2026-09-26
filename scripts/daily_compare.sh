@@ -20,9 +20,11 @@ OUT="$REPO/data/model_compare.jsonl"
 LOGDIR="$REPO/data/compare_log"
 # 지점이 표본을 늘리는 유일한 축이다 — 같은 날 여러 번 돌려도 롤업이
 # (지점, 날짜)로 중복을 제거해서 표본은 하루 1개다.
-# wolpo(포항) · mallipo(태안)는 2026-09-27 추가. 그전까지 두 지역은 대조
-# 근거 없이 모델이 정해져 있었다. busan 은 Windfinder 페이지를 못 찾았다.
-SPOTS=(sokcho jeju wolpo mallipo)
+# wolpo(포항) · mallipo(태안) · seogwipo/hamdok(제주 남·북동) · yeosu(남해안)를
+# 2026-09-27 에 추가했다. pohang·west_south 는 대조 근거 없이 모델이 정해져
+# 있었고, 제주는 남(33.22)~북동(33.56)이 파도가 달라 한 지점으로 못 대표한다.
+# busan(3곳)은 Windfinder 페이지를 못 찾아 아직 공백이다.
+SPOTS=(sokcho jeju wolpo mallipo seogwipo hamdok yeosu)
 
 # 파고 후보 전체 + 첨두주기를 주는 ecmwf 계열.
 #

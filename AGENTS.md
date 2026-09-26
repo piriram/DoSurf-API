@@ -159,7 +159,22 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 ```
 
 `--from-windfinder` 가 예보 페이지에서 파고·파주기를 직접 읽어 넣는다.
-지점은 `sokcho`, `jeju`, `wolpo`, `mallipo` 네 곳이 정의돼 있다(`REFERENCE_SPOTS`).
+지점은 일곱 곳이 정의돼 있다(`REFERENCE_SPOTS`) — `sokcho`, `jeju`, `wolpo`,
+`mallipo`, `seogwipo`, `hamdok`, `yeosu`.
+
+`--spot` 이름과 Windfinder slug 는 다를 수 있다(`seogwipo` 의 페이지는
+`seogwipo_jeju-do_south_korea`). 매핑은 `REFERENCE_SPOTS` 의 `windfinder` 필드다.
+**2026-09-27 까지 이 필드가 쓰이지 않아** `--spot` 이름을 그대로 slug 로 던지고
+있었다 — 짧은 이름만 우연히 동작하던 상태였고 고쳤다.
+
+**제주는 한 지점으로 대표할 수 없다.** locations.json 의 제주 6곳이 남(33.22)부터
+북동(33.56)까지 흩어져 있고 받는 스웰이 다르다. 2026-09-27 같은 날 Windfinder
+파주기가 `seogwipo` 6→9초, `jeju`(북서) 5→7초였다. 그래서 남부(`seogwipo`)와
+북동(`hamdok`, 함덕해변과 0.2km)을 따로 잰다.
+
+**판별력은 지점마다 다르다.** 기준값이 하루 종일 평탄한 날은 모델을 구분할 수
+없다 — 2026-09-27 `sokcho` 파주기는 8시각 전부 5.0초였고, 같은 날 `yeosu` 는
+5→10초로 움직였다. 표본 수(`n`)만 보지 말고 그 날 기준값이 변했는지도 볼 것.
 `--out` 으로 누적해야 여러 날 비교가 쌓인다.
 
 **원시값은 순위와 별도로 저장된다.** 대조 순위는 기준값이 있는 파고·파주기로만
@@ -191,6 +206,14 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 `songjeong`·`dadaepo`·`gwangalli`·`haeundae`·`gijang`·`ilgwang`·`busan` 이
 전부 404다(2026-09-27 확인). 이름이 다른 페이지를 찾으면 `REFERENCE_SPOTS` 에
 추가할 것.
+
+**지점 후보를 찾는 방법.** Windfinder 검색 페이지는 SPA 라 HTML 에 결과가 없고
+`/region/`·`/country/` 경로도 404다. 대신 **기존 지점 페이지에 인접 지점 링크가
+10개씩 박혀 있다** — `/forecast/<slug>` 를 긁으면 후보가 나온다. 거기서 얻은
+`seogwipo`·`hamdok`·`yeosu` 가 실제로 파고·파주기 8/8 로 파싱됐다.
+`*_airport`·`*-air-base` 처럼 공항·관측소 지점은 파도 데이터가 없어
+`reference_series` 가 파싱 실패로 떨어진다(`gangneung` 이 그 경우다).
+좌표는 페이지 HTML 의 `"lat"`/`"lon"` 값을 쓴다.
 
 **파주기는 첨두(peak)끼리만 비교한다.** 기준값인 Windfinder가 화면에 쓰는 값이
 첨두주기라서다. 이 스크립트는 `wave_peak_period` 를 함께 요청하고, 값이 오는
