@@ -13,7 +13,8 @@
 
 set -uo pipefail
 
-REPO="/Users/piri/code/DoSurf-API"
+# 저장소 위치는 이 스크립트 위치에서 구한다 — 맥을 바꿔도 안 깨진다.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$REPO/.venv/bin/python3"
 OUT="$REPO/data/model_compare.jsonl"
 LOGDIR="$REPO/data/compare_log"
