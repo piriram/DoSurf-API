@@ -151,7 +151,32 @@ REFERENCE_SPOTS = {
     # geoje 는 없다 (2026-09-27 확인).
     "yeosu":    {"lat": 34.7333, "lon": 127.7333, "windfinder": "yeosu",
                  "regions": ["west_south"]},
+
+    # ── 동해안 격자 공백 메우기 (2026-09-27 추가) ──
+    # sokcho 한 지점이 sokcho+yangyang+gangneung 16곳을 대표하고 있었는데,
+    # 실측해 보니 그 16곳 중 15곳이 sokcho 와 **다른 Open-Meteo 격자**를 받는다
+    # (삼척 용화는 121km 떨어져 격자가 (37.33,129.33) vs (38.17,128.67)).
+    # 모델 선택은 인접 격자로 어느 정도 전이되지만 편향은 격자마다 달라서
+    # 전이되지 않는다 — 보정계수를 상수로 못 박는 이유가 구조적으로 이것이다.
+    "gisamun":  {"lat": 38.0057, "lon": 128.7322, "windfinder": "gisamun_beach",
+                 "regions": ["yangyang"]},     # 기사문해변 자체
+    "donghae":  {"lat": 37.5000, "lon": 129.1166, "windfinder": "donghae",
+                 "regions": ["gangneung"]},    # 동해 대진과 같은 격자
+
+    # 울산 진하는 pohang 지역으로 분류돼 있는데 wolpo 에서 91km 다.
+    # ulsan 을 쓰면 15km 로 줄지만 격자는 여전히 다르다((35.33,129.33) vs
+    # (35.5,129.5)). 부분 개선이고, 'Ulsan (Tide)' 는 조위 관측소 지점이다 —
+    # Windfinder 파고·파주기는 어느 지점이든 모델(WW3) 예보라 성격은 같지만
+    # 결과가 이상하면 이 지점을 먼저 의심할 것.
+    "ulsan":    {"lat": 35.5167, "lon": 129.3833, "windfinder": "ulsan",
+                 "regions": ["pohang"]},
 }
+
+# `yangyang_virtual_buoy` 는 쓰지 않는다. Windfinder 의 "virtual buoy" 는 관측이
+# 아니라 모델 산출점이라, 기준값으로 쓰면 모델을 모델로 검증하는 순환이 된다.
+# 강릉 본체(경포·사천·주문진)는 Windfinder 에 페이지가 없다 — gyeongpo ·
+# jumunjin · gangneung_beach · sacheonjin · jeongdongjin · okgye · mangsang ·
+# samcheok 전부 404 이고, `gangneung` 페이지는 파도 데이터가 없다 (2026-09-27).
 
 # busan(송정·다대포·광안리 3곳)은 아직 대조 지점이 없다. Windfinder 에
 # songjeong · dadaepo · gwangalli · haeundae · gijang · ilgwang · busan 이

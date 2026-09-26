@@ -159,13 +159,46 @@ Open-Meteo는 더 멀리까지 줘서 항상 90% 조건(`collection.py:156`)에 
 ```
 
 `--from-windfinder` 가 예보 페이지에서 파고·파주기를 직접 읽어 넣는다.
-지점은 일곱 곳이 정의돼 있다(`REFERENCE_SPOTS`) — `sokcho`, `jeju`, `wolpo`,
-`mallipo`, `seogwipo`, `hamdok`, `yeosu`.
+지점은 열 곳이 정의돼 있다(`REFERENCE_SPOTS`) — `sokcho`, `jeju`, `wolpo`,
+`mallipo`, `seogwipo`, `hamdok`, `yeosu`, `gisamun`, `donghae`, `ulsan`.
+
+### ⚠️ 대조 지점 좌표는 해변 좌표가 아니다
+
+대조는 Windfinder 지점 좌표로 하고, 실제 수집은 `locations.json` 의 해변 좌표로
+한다. **둘이 다르고, 대부분 Open-Meteo 격자도 다르다** (2026-09-27 실측,
+`ncep_gfswave016` 기준).
+
+| 지역 | 해변 | 담당 대조지점 | 격자일치 | 최대거리 |
+|---|---|---|---|---|
+| busan | 3 | — 없음 — | 0/3 | — |
+| gangneung | 7 | donghae · sokcho | 1/7 | 43.8km |
+| jeju | 6 | hamdok · jeju · seogwipo | 1/6 | 23.8km |
+| pohang | 5 | ulsan · wolpo | 3/5 | 23.8km |
+| sokcho | 3 | sokcho | 1/3 | 16.1km |
+| west_south | 2 | mallipo · yeosu | 1/2 | 32.2km |
+| yangyang | 6 | gisamun | **6/6** | 4.5km |
+
+합계 13/32곳만 같은 격자다. 지점 추가 전에는 6/29였고 거리 중앙값이 26.8km였다
+(지금 11.7km).
+
+**그래서 무엇을 믿고 무엇을 믿지 않나.** 모델 **선택**(어느 모델이 이 해역에서
+더 정확한가)은 모델의 체계적 특성이라 인접 격자로 어느 정도 전이된다.
+**편향(보정계수)은 격자마다 달라 전이되지 않는다** — 대조 지점에서 구한 편향을
+해변에 상수로 박으면 안 된다. 「보정계수를 넣을 때」의 금지 규칙이 통계적 이유
+말고도 이 구조적 이유를 함께 갖고 있다.
+
+`gangneung` 7곳이 가장 약하다. 강릉 본체(경포·사천·주문진)는 Windfinder 에
+페이지가 없어서 북쪽은 `sokcho`, 남쪽은 `donghae` 가 나눠 대표한다.
 
 `--spot` 이름과 Windfinder slug 는 다를 수 있다(`seogwipo` 의 페이지는
 `seogwipo_jeju-do_south_korea`). 매핑은 `REFERENCE_SPOTS` 의 `windfinder` 필드다.
 **2026-09-27 까지 이 필드가 쓰이지 않아** `--spot` 이름을 그대로 slug 로 던지고
 있었다 — 짧은 이름만 우연히 동작하던 상태였고 고쳤다.
+
+**동해안은 `sokcho` 하나로 대표할 수 없었다.** 2026-09-27 전까지 `sokcho` 가
+sokcho+yangyang+gangneung 16곳을 대표했는데 그중 15곳이 다른 격자였다.
+`gisamun`(기사문해변 자체)을 넣어 yangyang 을 6/6 로 맞추고, `donghae` 로
+강릉 남부를 받게 했다.
 
 **제주는 한 지점으로 대표할 수 없다.** locations.json 의 제주 6곳이 남(33.22)부터
 북동(33.56)까지 흩어져 있고 받는 스웰이 다르다. 2026-09-27 같은 날 Windfinder
