@@ -32,7 +32,7 @@
   { "beach_id": 5007, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "yonghwa", "display_name": "삼척 용화", "lat": 37.3231, "lon": 129.2965 },
 
   { "beach_id": 6001, "region": "sokcho", "region_name": "고성 / 속초", "region_order": 6, "beach": "songjiho", "display_name": "고성 송지호", "lat": 38.3312, "lon": 128.5266 },
-  { "beach_id": 6002, "region": "sokcho", "region_name": "고성 / 속초", "region_order": 6, "beach": "cheonjin", "display_name": "고성 천진", "lat": 38.376, "lon": 128.4762 },
+  { "beach_id": 6002, "region": "sokcho", "region_name": "고성 / 속초", "region_order": 6, "beach": "cheonjin", "display_name": "고성 천진", "lat": 38.24, "lon": 128.562 },
   { "beach_id": 6003, "region": "sokcho", "region_name": "고성 / 속초", "region_order": 6, "beach": "sokcho", "display_name": "속초 속초", "lat": 38.2043, "lon": 128.5923 },
 
   { "beach_id": 8001, "region": "west_south", "region_name": "서해 / 남해", "region_order": 7, "beach": "manripo", "display_name": "태안 만리포", "lat": 36.7915, "lon": 126.1458 },
