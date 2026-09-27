@@ -16,6 +16,7 @@ HTTP API가 아니라 **Firestore를 직접 읽는다.**
 현재 상태, 결정 사항, 바로 실행할 명령이 맨 위에 있다.
 
 관련 문서:
+- [`docs/backlog.md`](./docs/backlog.md) — **할 일 목록.** 무엇이 진행 가능하고 무엇에 막혀 있는지
 - [`docs/marine-data-audit.md`](./docs/marine-data-audit.md) — 측정값과 근거
 - [`docs/marine-data-audit.html`](./docs/marine-data-audit.html) — 같은 내용, 차트 포함
 - [`docs/ios-migration.md`](./docs/ios-migration.md) — iOS에서 고칠 것
