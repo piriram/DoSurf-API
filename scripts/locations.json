@@ -6,7 +6,7 @@
   { "beach_id": 1005, "region": "yangyang", "region_name": "양양", "region_order": 1, "beach": "namae3ri", "display_name": "남애3리", "lat": 37.9694, "lon": 128.754 },
   { "beach_id": 1006, "region": "yangyang", "region_name": "양양", "region_order": 1, "beach": "mulchi", "display_name": "물치", "lat": 37.9973, "lon": 128.7556 },
 
-  { "beach_id": 2001, "region": "pohang", "region_name": "포항 / 울산 / 영덕", "region_order": 2, "beach": "wolpo", "display_name": "포항 월포", "lat": 36.2014, "lon": 129.3606 },
+  { "beach_id": 2001, "region": "pohang", "region_name": "포항 / 울산 / 영덕", "region_order": 2, "beach": "wolpo", "display_name": "포항 월포", "lat": 36.2025, "lon": 129.371 },
   { "beach_id": 2002, "region": "pohang", "region_name": "포항 / 울산 / 영덕", "region_order": 2, "beach": "sinhangman", "display_name": "포항 신항만", "lat": 36.0257, "lon": 129.4076 },
   { "beach_id": 2003, "region": "pohang", "region_name": "포항 / 울산 / 영덕", "region_order": 2, "beach": "yeongildae", "display_name": "포항 영일대", "lat": 36.0563, "lon": 129.3802 },
   { "beach_id": 2004, "region": "pohang", "region_name": "포항 / 울산 / 영덕", "region_order": 2, "beach": "jinha", "display_name": "울산 진하", "lat": 35.3833, "lon": 129.3655 },
