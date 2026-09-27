@@ -1,0 +1,269 @@
+{
+  "generated_at": "2026-09-27T18:26:34",
+  "method": "Open-Meteo /v1/elevation · 10도 간격 36방위 · 반경 (2.0, 5.0) km 모두 0m 이하를 바다로 판정 · 가장 긴 연속 구간의 중심",
+  "note": "초안이다. 실제 스팟을 아는 사람의 검수가 필요하다 (docs/marine-data-audit.md Q3). swell_window_deg 가 60도 미만이거나 인접 해변과 방위가 크게 다른 곳을 먼저 볼 것.",
+  "beaches": {
+    "1001": {
+      "beach": "jukdo",
+      "display_name": "죽도",
+      "region": "yangyang",
+      "shore_normal_deg": 60,
+      "swell_window_deg": 170,
+      "sea_bearings": 17
+    },
+    "1002": {
+      "beach": "ingu",
+      "display_name": "인구",
+      "region": "yangyang",
+      "shore_normal_deg": 65,
+      "swell_window_deg": 200,
+      "sea_bearings": 20
+    },
+    "1003": {
+      "beach": "gisamun",
+      "display_name": "기사문",
+      "region": "yangyang",
+      "shore_normal_deg": 50,
+      "swell_window_deg": 210,
+      "sea_bearings": 21
+    },
+    "1004": {
+      "beach": "gaetmaeul",
+      "display_name": "갯마을",
+      "region": "yangyang",
+      "shore_normal_deg": 55,
+      "swell_window_deg": 220,
+      "sea_bearings": 22
+    },
+    "1005": {
+      "beach": "namae3ri",
+      "display_name": "남애3리",
+      "region": "yangyang",
+      "shore_normal_deg": 60,
+      "swell_window_deg": 150,
+      "sea_bearings": 15
+    },
+    "1006": {
+      "beach": "mulchi",
+      "display_name": "물치",
+      "region": "yangyang",
+      "shore_normal_deg": 60,
+      "swell_window_deg": 210,
+      "sea_bearings": 21
+    },
+    "2001": {
+      "beach": "wolpo",
+      "display_name": "포항 월포",
+      "region": "pohang",
+      "shore_normal_deg": 100,
+      "swell_window_deg": 70,
+      "sea_bearings": 7
+    },
+    "2002": {
+      "beach": "sinhangman",
+      "display_name": "포항 신항만",
+      "region": "pohang",
+      "shore_normal_deg": 35,
+      "swell_window_deg": 80,
+      "sea_bearings": 13,
+      "note": "바다 방위가 여러 토막이다(총 13개 중 8개 구간 채택)"
+    },
+    "2003": {
+      "beach": "yeongildae",
+      "display_name": "포항 영일대",
+      "region": "pohang",
+      "shore_normal_deg": 95,
+      "swell_window_deg": 60,
+      "sea_bearings": 9,
+      "note": "바다 방위가 여러 토막이다(총 9개 중 6개 구간 채택)"
+    },
+    "2004": {
+      "beach": "jinha",
+      "display_name": "울산 진하",
+      "region": "pohang",
+      "shore_normal_deg": 100,
+      "swell_window_deg": 210,
+      "sea_bearings": 21
+    },
+    "2005": {
+      "beach": "buheung",
+      "display_name": "영덕 부흥",
+      "region": "pohang",
+      "shore_normal_deg": 75,
+      "swell_window_deg": 100,
+      "sea_bearings": 10
+    },
+    "3001": {
+      "beach": "sagye",
+      "display_name": "사계",
+      "region": "jeju",
+      "shore_normal_deg": 145,
+      "swell_window_deg": 140,
+      "sea_bearings": 14
+    },
+    "3002": {
+      "beach": "jungmun",
+      "display_name": "중문",
+      "region": "jeju",
+      "shore_normal_deg": 180,
+      "swell_window_deg": 110,
+      "sea_bearings": 11
+    },
+    "3003": {
+      "beach": "woljeong",
+      "display_name": "월정",
+      "region": "jeju",
+      "shore_normal_deg": 5,
+      "swell_window_deg": 140,
+      "sea_bearings": 14
+    },
+    "3004": {
+      "beach": "gimnyeong",
+      "display_name": "김녕",
+      "region": "jeju",
+      "shore_normal_deg": 350,
+      "swell_window_deg": 150,
+      "sea_bearings": 15
+    },
+    "3005": {
+      "beach": "hamdeok",
+      "display_name": "함덕",
+      "region": "jeju",
+      "shore_normal_deg": 0,
+      "swell_window_deg": 150,
+      "sea_bearings": 15
+    },
+    "3006": {
+      "beach": "ihoteu",
+      "display_name": "이호테우",
+      "region": "jeju",
+      "shore_normal_deg": 335,
+      "swell_window_deg": 160,
+      "sea_bearings": 16
+    },
+    "4001": {
+      "beach": "songjeong",
+      "display_name": "송정",
+      "region": "busan",
+      "shore_normal_deg": 135,
+      "swell_window_deg": 120,
+      "sea_bearings": 12
+    },
+    "4002": {
+      "beach": "dadaepo",
+      "display_name": "다대포",
+      "region": "busan",
+      "shore_normal_deg": 220,
+      "swell_window_deg": 130,
+      "sea_bearings": 24,
+      "note": "바다 방위가 여러 토막이다(총 24개 중 13개 구간 채택)"
+    },
+    "5001": {
+      "beach": "geumjin",
+      "display_name": "강릉 금진",
+      "region": "gangneung",
+      "shore_normal_deg": 45,
+      "swell_window_deg": 160,
+      "sea_bearings": 16
+    },
+    "5002": {
+      "beach": "gyengpo",
+      "display_name": "강릉 경포",
+      "region": "gangneung",
+      "shore_normal_deg": 45,
+      "swell_window_deg": 140,
+      "sea_bearings": 14
+    },
+    "5003": {
+      "beach": "namae",
+      "display_name": "강릉 남애",
+      "region": "gangneung",
+      "shore_normal_deg": 55,
+      "swell_window_deg": 240,
+      "sea_bearings": 24
+    },
+    "5004": {
+      "beach": "sacheonjin",
+      "display_name": "강릉 사천진",
+      "region": "gangneung",
+      "shore_normal_deg": 50,
+      "swell_window_deg": 190,
+      "sea_bearings": 19
+    },
+    "5005": {
+      "beach": "sacheon",
+      "display_name": "강릉 사천",
+      "region": "gangneung",
+      "shore_normal_deg": 60,
+      "swell_window_deg": 130,
+      "sea_bearings": 13
+    },
+    "5006": {
+      "beach": "daejin",
+      "display_name": "동해 대진",
+      "region": "gangneung",
+      "shore_normal_deg": 85,
+      "swell_window_deg": 80,
+      "sea_bearings": 8
+    },
+    "5007": {
+      "beach": "yonghwa",
+      "display_name": "삼척 용화",
+      "region": "gangneung",
+      "shore_normal_deg": 55,
+      "swell_window_deg": 200,
+      "sea_bearings": 20
+    },
+    "6001": {
+      "beach": "songjiho",
+      "display_name": "고성 송지호",
+      "region": "sokcho",
+      "shore_normal_deg": 70,
+      "swell_window_deg": 170,
+      "sea_bearings": 17
+    },
+    "6002": {
+      "beach": "cheonjin",
+      "display_name": "고성 천진",
+      "region": "sokcho",
+      "shore_normal_deg": 50,
+      "swell_window_deg": 30,
+      "sea_bearings": 3,
+      "note": "스웰 창이 좁다 — 만 안쪽이거나 좌표가 실제 입수점과 다를 수 있다"
+    },
+    "6003": {
+      "beach": "sokcho",
+      "display_name": "속초 속초",
+      "region": "sokcho",
+      "shore_normal_deg": 50,
+      "swell_window_deg": 110,
+      "sea_bearings": 14,
+      "note": "바다 방위가 여러 토막이다(총 14개 중 11개 구간 채택)"
+    },
+    "8001": {
+      "beach": "manripo",
+      "display_name": "태안 만리포",
+      "region": "west_south",
+      "shore_normal_deg": 285,
+      "swell_window_deg": 160,
+      "sea_bearings": 16
+    },
+    "8002": {
+      "beach": "namyeol",
+      "display_name": "고흥 남열 해돋이",
+      "region": "west_south",
+      "shore_normal_deg": 100,
+      "swell_window_deg": 30,
+      "sea_bearings": 9,
+      "note": "스웰 창이 좁다 — 만 안쪽이거나 좌표가 실제 입수점과 다를 수 있다"
+    },
+    "4003": {
+      "beach": "gwangalli",
+      "display_name": "광안리",
+      "region": "busan",
+      "shore_normal_deg": 130,
+      "swell_window_deg": 90,
+      "sea_bearings": 9
+    }
+  }
+}
