@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-27T18:53:12",
+  "generated_at": "2026-09-28T19:15:39",
   "method": "Open-Meteo /v1/elevation · 10도 간격 36방위 · 반경 (2.0, 5.0) km 모두 0m 이하를 바다로 판정 · 가장 긴 연속 구간의 중심",
   "note": "초안이다. 실제 스팟을 아는 사람의 검수가 필요하다 (docs/marine-data-audit.md Q3). swell_window_deg 가 60도 미만이거나 인접 해변과 방위가 크게 다른 곳을 먼저 볼 것.",
   "beaches": {
@@ -226,10 +226,9 @@
       "beach": "cheonjin",
       "display_name": "고성 천진",
       "region": "sokcho",
-      "shore_normal_deg": 50,
-      "swell_window_deg": 30,
-      "sea_bearings": 3,
-      "note": "스웰 창이 좁다 — 만 안쪽이거나 좌표가 실제 입수점과 다를 수 있다"
+      "shore_normal_deg": 55,
+      "swell_window_deg": 120,
+      "sea_bearings": 12
     },
     "6003": {
       "beach": "sokcho",
