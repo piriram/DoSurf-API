@@ -28,7 +28,7 @@
   { "beach_id": 5003, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "namae", "display_name": "강릉 남애", "lat": 37.9347, "lon": 128.8217 },
   { "beach_id": 5004, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "sacheonjin", "display_name": "강릉 사천진", "lat": 37.8448, "lon": 128.8754 },
   { "beach_id": 5005, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "sacheon", "display_name": "강릉 사천", "lat": 37.8257, "lon": 128.8758 },
-  { "beach_id": 5006, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "daejin", "display_name": "동해 대진", "lat": 37.5383, "lon": 129.1042 },
+  { "beach_id": 5006, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "daejin", "display_name": "동해 대진", "lat": 37.5383, "lon": 129.1142 },
   { "beach_id": 5007, "region": "gangneung", "region_name": "강릉 / 동해 / 삼척", "region_order": 5, "beach": "yonghwa", "display_name": "삼척 용화", "lat": 37.3231, "lon": 129.2965 },
 
   { "beach_id": 6001, "region": "sokcho", "region_name": "고성 / 속초", "region_order": 6, "beach": "songjiho", "display_name": "고성 송지호", "lat": 38.3312, "lon": 128.5266 },
