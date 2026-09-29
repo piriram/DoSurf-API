@@ -7,8 +7,27 @@
 
 사용:
     .venv/bin/python3 -m scripts.compare_rollup
+    .venv/bin/python3 -m scripts.compare_rollup --summary-only   # 지점별 편향 표만
     .venv/bin/python3 -m scripts.compare_rollup --spot sokcho
     .venv/bin/python3 -m scripts.compare_rollup --reference windy
+
+── 출력이 두 부분이다 ──
+
+**1. 지점별 편향 요약 표** (맨 위). 열두 지점을 한 줄씩 나란히 놓는다.
+보정계수는 "이 지점에 상수를 박아도 되는가"를 묻는 것이고 그 답은 지점끼리
+비교해야 나온다. 아래 상세는 지점을 하나씩 찍으므로 그 비교가 안 된다.
+
+**파고와 첨두주기는 다른 모델로 잰다.** 파고는 그 지역의 수집 모델
+(`region_models`), 첨두주기는 `peak_period_model` 이다 — 첨두주기를 주는
+모델이 ecmwf 계열뿐이라 지역 모델은 `wave_peak_period` 를 전부 `None` 으로
+돌려준다. 지역 모델로 첨두 편향을 찾으면 n=0 만 나오고, 그건 "표본이 없다"가
+아니라 **"그 모델에 애초에 첨두주기가 없다"** 는 뜻이다.
+
+`grid_coverage.json` 의 적용 가능 해변을 같은 줄에 찍는다. **0곳인 지점
+(`ulsan`·`yeosu`·`seogwipo`)의 편향은 구해도 쓸 데가 없다** — 격자가 다르면
+편향이 전이되지 않는다.
+
+**2. 지점별 상세** (기존 출력). 모델 순위·날짜별 1위·판정.
 
 ── 무엇을 보고 무엇을 무시하나 ──
 
@@ -164,6 +183,198 @@ def cross_summary(records, label):
     }
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  지점별 편향 요약 표
+# ══════════════════════════════════════════════════════════════════════
+#
+# 아래 지점별 상세는 지점을 하나씩 따로 찍으므로 **열두 지점을 나란히 볼 수
+# 없다.** 보정계수는 "이 지점에 상수를 박아도 되는가"를 묻는 것이고 그 답은
+# 지점끼리 비교해야 나온다. 그래서 요약 표를 상세 위에 덧붙인다.
+#
+# **모델을 섞으면 의미가 없다.** 편향은 모델마다 다르므로, 각 지점에서
+# **그 지역이 실제 수집에 쓰는 모델**(config.json 의 region_models)의 편향만 본다.
+# 다른 모델이 그 지점에서 더 잘 맞아도 운영에 쓰이지 않으니 보정 대상이 아니다.
+
+CONFIG_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+COVERAGE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data", "grid_coverage.json")
+
+# 편향 절댓값이 이보다 작으면 보정할 게 없다. 격자 간 파고차(중앙값 0.020m)와
+# 모델 1·2위 차(0.001m)를 감안한 선이다 — 그 아래는 측정 노이즈와 구분되지 않는다.
+BIAS_NEGLIGIBLE_M = 0.05
+
+# 첨두주기 쪽 대응값. **임시값이다** — 파고 0.05m 는 격자 간 파고차(0.020m)와
+# 모델 1·2위 차(0.001m) 실측에서 나왔는데, 주기에는 아직 그 실측이 없다.
+# 표본 5일이 모이면(10/1 예정) 다시 정한다.
+PERIOD_BIAS_NEGLIGIBLE_S = 0.3
+
+
+def region_models():
+    """config.json 의 지역별 수집 모델. (지역→모델, 기본모델, 첨두주기모델)
+
+    **파고와 첨두주기는 서로 다른 모델에서 온다.** 파고는 지역 모델이고
+    첨두주기는 `peak_period_model` 하나다 — 첨두주기를 주는 모델이 ecmwf
+    계열뿐이라 지역 모델(`ncep_gfswave016`·`best_match`)은 값을 전부 `None`
+    으로 돌려준다. 그래서 요약 표도 두 축을 다른 모델로 재야 한다.
+    """
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            marine = json.load(f)["marine"]
+        return (marine.get("region_models", {}), marine.get("default_model"),
+                marine.get("peak_period_model"))
+    except (OSError, ValueError, KeyError):
+        return {}, None, None
+
+
+def load_coverage():
+    """grid_coverage.json 의 지점별 적용 가능 해변. 없으면 None."""
+    if not os.path.exists(COVERAGE_PATH):
+        return None
+    try:
+        with open(COVERAGE_PATH, encoding="utf-8") as f:
+            return json.load(f).get("spots", {})
+    except (OSError, ValueError):
+        return None
+
+
+def spot_regions():
+    """지점이 담당하는 지역. model_compare 의 정의를 그대로 쓴다.
+
+    import 를 함수 안에 둔 것은 순환 import 를 피하려는 것이다 —
+    grid_coverage.py 가 model_compare 를 import 하고 있다.
+    """
+    try:
+        from scripts.model_compare import REFERENCE_SPOTS
+        return {n: s.get("regions", []) for n, s in REFERENCE_SPOTS.items()}
+    except Exception:
+        return {}
+
+
+def verdict(n, bias, sigma, negligible):
+    """보정계수를 상수로 박아도 되는지. 판정 규칙은 지점별 상세와 같다."""
+    if n < MIN_SAMPLES:
+        return "표본부족", f"n<{MIN_SAMPLES}"
+    if bias is None:
+        return "측정없음", "편향 값이 없다"
+    if abs(bias) <= negligible:
+        return "불필요", f"|편향|≤{negligible}"
+    if sigma is None:
+        return "σ모름", "표본 2일 미만"
+    if sigma < abs(bias) / 2:
+        return "가능", "σ<|편향|/2"
+    return "σ초과", "상수화 금지"
+
+
+def summary_table(records, suffix, ref_name, labels):
+    """지점별 한 줄 요약. 파고와 첨두주기를 **다른 모델로** 따로 낸다."""
+    rm, default, peak_model = region_models()
+    coverage = load_coverage()
+    regions_of = spot_regions()
+
+    rows = []
+    for label in labels:
+        per_model, _, dates, _, _ = collect(records, label, suffix)
+        if not per_model:
+            continue
+
+        regions = regions_of.get(label, [])
+        wave_models = {rm.get(r, default) for r in regions} or {default}
+
+        rows.append({
+            "label": label, "regions": regions, "days": len(dates),
+            "per_model": per_model,
+            "wave_model": sorted(wave_models)[0] if len(wave_models) == 1 else None,
+            "mixed": len(wave_models) > 1,
+            "applies": coverage.get(label, {}).get("applies_to") if coverage else None,
+        })
+
+    if not rows:
+        # 조용히 빠지면 --summary-only 가 아무 출력 없이 성공한 것처럼 보인다.
+        # Windy 기준이 대표적이다 — 자동 수집이 Windy 를 안 받아 전부 null 이다.
+        print(f"\n지점별 편향 요약: 기준 {ref_name} 로 집계할 값이 없다.")
+        print(f"  검사한 지점 {len(labels)}곳 전부 그 기준의 기록이 비어 있다.")
+        return
+
+    has_coverage = coverage is not None
+
+    def coverage_cell(applies):
+        if not has_coverage:
+            return ""
+        if applies is None:
+            return "커버리지 미상"
+        if not applies:
+            return "⚠ 0곳 — 이 편향은 쓸 데가 없다"
+        return f"{len(applies)}곳  " + ", ".join(applies)
+
+    def block(title, bias_key, unit, fmt, model_of, negligible):
+        print(f"\n{'=' * 104}")
+        print(f"지점별 편향 요약 · 기준 {ref_name} · {title}")
+        print("=" * 104)
+        # 한글은 터미널에서 두 칸을 차지한다. 헤더 폭을 데이터 행에 맞춰 손으로 뺀다.
+        print(f"{'지점':<8}{'모델':>13}{'n':>4}{'편향평균':>6}{'편향σ':>8}"
+              f"  {'판정':<6}" + ("적용 해변" if has_coverage else ""))
+        print("-" * 104)
+
+        for r in rows:
+            label = r["label"]
+            model = model_of(r)
+            if model is None:
+                print(f"{label:10}{'— 지역 혼재 —':>15}{'':>4}{'':>10}{'':>10}"
+                      f"  담당 지역이 {r['regions']} 인데 모델이 다르다")
+                continue
+            acc = r["per_model"].get(model)
+            if acc is None:
+                print(f"{label:10}{model:>15}{'':>4}{'미측정':>10}{'':>10}"
+                      f"  이 모델로 잰 기록이 없다")
+                continue
+
+            values = acc[bias_key]
+            n = len(values)
+            b, s = mean(values), stdev(values)
+            verd, _ = verdict(n, b, s, negligible)
+
+            print(f"{label:10}{model:>15}{n:>4}"
+                  f"{(fmt(b) if b is not None else '—'):>10}"
+                  f"{(f'{s:.3f}' if s is not None else '—'):>10}"
+                  f"  {verd:8}{coverage_cell(r['applies'])}")
+
+        print("-" * 104)
+        print(f"판정: 표본부족 n<{MIN_SAMPLES} · 불필요 |편향|≤{negligible}{unit} · "
+              f"가능 σ<|편향|/2 · σ초과는 상수화 금지")
+
+    block("파고 (m) — 지역 수집 모델", "bias", "m",
+          lambda v: f"{v:+.3f}", lambda r: r["wave_model"], BIAS_NEGLIGIBLE_M)
+
+    # ── 첨두주기는 지역 모델이 아니라 peak_period_model 로 잰다 ──
+    # 지역 모델(ncep_gfswave016 · best_match)은 wave_peak_period 를 전부 None
+    # 으로 돌려준다. 그 모델의 첨두 편향을 찾으면 n=0 만 나오고, 그것은
+    # "표본이 없다"가 아니라 "애초에 그 모델에 첨두주기가 없다"는 뜻이다.
+    if peak_model:
+        block(f"첨두주기 (초) — peak_period_model = {peak_model}",
+              "bias_period", "초", lambda v: f"{v:+.2f}",
+              lambda r: peak_model, PERIOD_BIAS_NEGLIGIBLE_S)
+    else:
+        print("\n(config.json 에 marine.peak_period_model 이 없어 "
+              "첨두주기 표를 건너뛴다)")
+
+    print()
+    print("**편향은 격자가 같은 해변에만 전이된다.** 격자 간 파고차가 중앙값")
+    print("0.020m 로 모델 1·2위 차(0.001m)를 20배 압도한다 (2026-09-27 실측).")
+    print("적용 해변이 0곳인 지점의 편향은 구해도 쓸 곳이 없다.")
+    if not has_coverage:
+        print()
+        print("⚠ data/grid_coverage.json 이 없어 적용 해변을 못 찍었다 —")
+        print("  .venv/bin/python3 -m scripts.grid_coverage --save 로 만들 것.")
+    print()
+    print(f"⚠ 첨두주기의 '불필요' 기준 {PERIOD_BIAS_NEGLIGIBLE_S}초는 "
+          "**임시값이고 근거가 약하다.**")
+    print("  파고 0.05m 는 격자 간 파고차(0.020m)와 모델 1·2위 차(0.001m)에서")
+    print("  나온 값인데, 주기에는 그에 대응하는 실측이 아직 없다. 표본이")
+    print("  5일을 넘으면(10/1 예정) 이 임계값부터 다시 정할 것.")
+
+
 def report(label, per_model, daily_best, dates, ref_name, cross,
            legacy_days=0, mean_period_days=0):
     print(f"\n{'=' * 78}")
@@ -306,6 +517,10 @@ def main():
     ap.add_argument("--spot", help="이 지점만 집계 (기본: 기록에 있는 전부)")
     ap.add_argument("--reference", choices=sorted(REFERENCES), default="windfinder",
                     help="어느 기준으로 순위를 낼지 (기본: windfinder)")
+    ap.add_argument("--summary-only", action="store_true",
+                    help="지점별 편향 요약 표만 (상세 생략)")
+    ap.add_argument("--no-summary", action="store_true",
+                    help="요약 표를 빼고 기존 상세만")
     args = ap.parse_args()
 
     records = load(args.path)
@@ -320,6 +535,13 @@ def main():
     suffix, ref_name = REFERENCES[args.reference]
     labels = [args.spot] if args.spot else sorted(
         {r.get("label") for r in records if r.get("label")})
+
+    # 요약을 상세보다 먼저 찍는다. 지점이 열둘이면 상세가 화면을 넘겨서
+    # 뒤에 붙이면 안 보인다.
+    if not args.no_summary:
+        summary_table(records, suffix, ref_name, labels)
+    if args.summary_only:
+        return 0
 
     printed = 0
     for label in labels:
