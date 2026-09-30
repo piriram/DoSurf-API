@@ -288,8 +288,16 @@ def update_global_beaches_list(all_beaches):
         kst_now = get_kst_now()
         
         # iOS에서 필요한 필드만 추출하여 간결하게 구성
+        #
+        # hidden: true 는 이 목록에서 뺀다. 두섭이 iOS 는 해변 목록도 지역 탭도
+        # 전부 이 문서 하나에서 만들고 regions/ 를 훑지 않으므로
+        # (DoSurf-iOS FirestoreRepository.fetchAllBeaches, 2026-09-30 확인),
+        # 여기서 빠지면 앱에 전혀 안 나타난다. 수집과 저장은 그대로 돌아서
+        # regions/{region}/{beach_id}/ 문서는 쌓인다 — 다른 앱이 읽어 가는 용도다.
         beaches_for_client = []
         for beach in all_beaches:
+            if beach.get("hidden"):
+                continue
             beaches_for_client.append({
                 "id": str(beach["beach_id"]),
                 "region": beach["region"],

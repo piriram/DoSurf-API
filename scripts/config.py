@@ -122,15 +122,25 @@ def get_marine_aux_variables():
     return _marine_config().get("aux_variables", DEFAULT_AUX_VARIABLES)
 
 
-def get_marine_peak_period_model():
+def get_marine_peak_period_model(region=None):
     """
     첨두주기를 받아올 모델.
 
     첨두주기(wave_peak_period)는 ecmwf_wam025/ecmwf_wam만 준다. 나머지 모델은
     변수를 받아주기는 하되 값을 전부 None으로 돌려준다(2026-08-30 실측).
     fallback_model(best_match)로도 못 받으므로 전용 모델을 따로 호출한다.
+
+    region_peak_period_models에 지정이 있으면 그쪽이 우선이다.
+    get_marine_model()과 같은 구조다 — 모델 격자가 지역마다 다르게 스냅되고,
+    전역 기본값(ecmwf_wam025, 25km)이 어떤 지역에서는 육지 칸에 떨어져
+    값을 아예 못 주기 때문이다. dive_jeju(서귀포 앞 섬)가 실제로 그렇다
+    (2026-09-30 실측, AGENTS.md 「다이빙 포인트」).
     """
-    return _marine_config().get("peak_period_model", DEFAULT_PEAK_PERIOD_MODEL)
+    marine = _marine_config()
+    default = marine.get("peak_period_model", DEFAULT_PEAK_PERIOD_MODEL)
+    if not region:
+        return default
+    return marine.get("region_peak_period_models", {}).get(region, default)
 
 
 def get_marine_peak_period_variables():

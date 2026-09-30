@@ -194,7 +194,7 @@ def fetch_marine(lat: float, lon: float, *,
     fallback_model = get_marine_fallback_model() if CONFIG_AVAILABLE else DEFAULT_MODEL
     wave_vars = get_marine_wave_variables() if CONFIG_AVAILABLE else FALLBACK_WAVE_VARIABLES
     aux_vars = get_marine_aux_variables() if CONFIG_AVAILABLE else FALLBACK_AUX_VARIABLES
-    peak_model = (get_marine_peak_period_model() if CONFIG_AVAILABLE
+    peak_model = (get_marine_peak_period_model(region) if CONFIG_AVAILABLE
                   else FALLBACK_PEAK_PERIOD_MODEL)
     peak_vars = (get_marine_peak_period_variables() if CONFIG_AVAILABLE
                  else FALLBACK_PEAK_PERIOD_VARIABLES)

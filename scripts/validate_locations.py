@@ -397,7 +397,10 @@ def main():
     if args.fixtures:
         return run_fixtures()
 
-    everything = load_locations()
+    # hidden 지점(서귀포 다이빙 섬 셋)은 뺀다. **섬은 사방이 바다인 것이 정상**
+    # 이라 「해상 좌표」 신호가 구조적으로 오탐한다 — 이 도구의 세 신호는
+    # 전부 "해변이 육지에 붙어 있다"를 전제로 만들어졌다.
+    everything = [b for b in load_locations() if not b.get("hidden")]
     beaches = [b for b in everything
                if not args.region or b["region"] == args.region]
     if not beaches:

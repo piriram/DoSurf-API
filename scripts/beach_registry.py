@@ -51,6 +51,8 @@ def update_global_beach_list(locations):
         # 해변 목록 생성
         beaches = []
         for loc in locations:
+            if loc.get("hidden"):
+                continue          # 앱에 노출하지 않는 지점 (storage.py 같은 규칙)
             beaches.append({
                 "id": str(loc["beach_id"]),
                 "region": loc["region"],

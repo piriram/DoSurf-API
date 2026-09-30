@@ -43,7 +43,7 @@ scripts/
   beach_registry.py     해변 목록 메타데이터
   cache_utils.py        메모리 캐시
   firebase_utils.py     Firestore 클라이언트 (지연 초기화)
-  locations.json        해변 32곳 정의
+  locations.json        해변 32곳 + 숨김 지점 3곳 정의
   windfinder.py         Windfinder 예보 페이지에서 파고·파주기 수집 (검증용)
   model_compare.py      파랑 모델을 Windfinder·Windy와 대조 — 편향/모양 분리
   compare_rollup.py     model_compare 누적분(jsonl)을 여러 날로 집계 — 결론은 여기서
@@ -57,6 +57,24 @@ config.json          ← 수집 주기·모델 선택 등 런타임 설정
 
 Firestore 경로: `regions/{region}/{beach_id}/{YYYYMMDDHHMM}`
 그 외 `_metadata`, `_region_metadata/beaches`, `_global_metadata/all_beaches`.
+
+> **컬렉션 이름은 `beach_id`(숫자)다.** `beach`(`munseom` 같은 영문명)가 아니다
+> — `storage.py:32`. 다른 앱에 경로를 알려줄 때 헷갈리기 쉽다.
+
+**`hidden: true` 인 지점은 `_global_metadata/all_beaches` 에서 빠진다.**
+수집·저장은 똑같이 돌아 `regions/{region}/{beach_id}/` 에 문서가 쌓이지만
+두섭이 앱에는 전혀 나타나지 않는다. 두섭이 iOS 가 해변 목록도 지역 탭도
+**이 문서 하나에서만** 만들고 `regions/` 를 훑지 않기 때문이다
+(`DoSurf-iOS` `FirestoreRepository.fetchAllBeaches`, 2026-09-30 확인.
+`findRegion(for:among:)` 은 프로토콜에만 있고 호출부가 없다).
+다른 앱이 읽어 가는 지점을 두섭이 화면에 안 띄우고 수집하는 방법이다.
+
+거르는 곳이 **두 군데**다 — `storage.update_global_beaches_list()`(수집 경로)와
+`beach_registry.update_global_beach_list()`. 한쪽만 고치면 새는 곳이 남는다.
+
+좌표 검수 도구 셋(`validate_locations` · `shore_normal` · `grid_coverage`)도
+`hidden` 을 건너뛴다. **섬은 사방이 바다인 것이 정상**이라 「해상 좌표」 신호가
+구조적으로 오탐하고, 커버리지 분모 `N/29` 에 섞이면 이전 날짜와 비교가 안 된다.
 
 ---
 
@@ -663,6 +681,28 @@ launchctl start com.dosurf.dive-compare    # 즉시 한 번
 launchctl list | grep dosurf               # 등록 확인 (둘 다 보여야 한다)
 launchctl unload ~/Library/LaunchAgents/com.dosurf.dive-compare.plist   # 끄기
 ```
+
+#### 운영 수집에도 들어간다 (2026-09-30)
+
+DoDive(다이브 로그 앱)가 다이브 시각의 파고·주기·바람·수온·조위를 붙이려고
+두섭이 Firestore 를 읽어 간다. 그래서 세 섬을 `locations.json` 에 **`hidden`
+지점**으로 넣어 3시간마다 수집한다. 대조(`dive_compare.sh`)와는 별개 경로다 —
+대조는 모델을 고르려는 것이고, 이쪽은 값을 쌓아 남의 앱에 주는 것이다.
+
+| beach_id | 경로 | 섬 |
+|---|---|---|
+| 9001 | `regions/dive_jeju/9001/{YYYYMMDDHHMM}` | 문섬 |
+| 9002 | `regions/dive_jeju/9002/{YYYYMMDDHHMM}` | 섶섬 |
+| 9003 | `regions/dive_jeju/9003/{YYYYMMDDHHMM}` | 범섬 |
+
+**9000번대는 「앱에 안 뜨는 숨김 지점」 대역이다.** 기존 1000~8000번대(서핑
+해변)와 멀리 떼어 놔야 실수로 섞이지 않는다. 문서 필드·구조는 해변과 같다.
+
+**두섭이 앱에는 안 나타난다** — `hidden: true` 라 `_global_metadata/all_beaches`
+에서 빠진다. 근거는 「구조」 절 참조. 보관은 해변과 같은 **7일**이다.
+
+`config.json` 의 `region_peak_period_models` 가 `dive_jeju` 에만 `ecmwf_wam` 을
+준다(아래 참조). 전역 기본값 `ecmwf_wam025` 는 해변 쪽 그대로다.
 
 좌표는 **OSM 에 `islet` 로 등록된 섬 중심**이다 (Nominatim, 2026-09-30).
 

@@ -36,5 +36,9 @@
   { "beach_id": 6003, "region": "sokcho", "region_name": "고성 / 속초", "region_order": 6, "beach": "sokcho", "display_name": "속초 속초", "lat": 38.2043, "lon": 128.5923 },
 
   { "beach_id": 8001, "region": "west_south", "region_name": "서해 / 남해", "region_order": 7, "beach": "manripo", "display_name": "태안 만리포", "lat": 36.7915, "lon": 126.1458 },
-  { "beach_id": 8002, "region": "west_south", "region_name": "서해 / 남해", "region_order": 7, "beach": "namyeol", "display_name": "고흥 남열 해돋이", "lat": 34.5768, "lon": 127.4375 }
+  { "beach_id": 8002, "region": "west_south", "region_name": "서해 / 남해", "region_order": 7, "beach": "namyeol", "display_name": "고흥 남열 해돋이", "lat": 34.5768, "lon": 127.4375 },
+
+  { "beach_id": 9001, "region": "dive_jeju", "region_name": "서귀포 다이빙", "region_order": 9, "beach": "munseom", "display_name": "문섬", "lat": 33.2263146, "lon": 126.5658877, "hidden": true },
+  { "beach_id": 9002, "region": "dive_jeju", "region_name": "서귀포 다이빙", "region_order": 9, "beach": "seopseom", "display_name": "섶섬", "lat": 33.2301425, "lon": 126.5984946, "hidden": true },
+  { "beach_id": 9003, "region": "dive_jeju", "region_name": "서귀포 다이빙", "region_order": 9, "beach": "beomseom", "display_name": "범섬", "lat": 33.2180733, "lon": 126.5166353, "hidden": true }
 ]

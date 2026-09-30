@@ -199,8 +199,11 @@ def main():
     ap.add_argument("--out", default=DEFAULT_OUT)
     args = ap.parse_args()
 
+    # hidden 지점(섬)은 뺀다 — 「스웰 창」은 육지가 막아 주는 arc 를 재는 것이라
+    # 사방이 트인 섬에서는 360° 가 나와 의미가 없다.
     beaches = [b for b in load_locations()
-               if not args.region or b["region"] == args.region]
+               if not b.get("hidden")
+               and (not args.region or b["region"] == args.region)]
 
     print(f"{'해변':16}{'지역':12}{'방위':>6}{'스웰창':>8}{'바다방위':>9}  비고")
     print("-" * 82)

@@ -126,6 +126,11 @@ def build(only_spot=None):
     orphans = []
 
     for loc in load_locations():
+        # hidden 지점은 커버리지 분모에서 뺀다. 「N/29」 는 **서핑 해변** 중
+        # 대조 결론을 적용할 수 있는 곳의 수이고, 다이빙 지점이 섞이면
+        # 이전 날짜와 숫자를 비교할 수 없게 된다.
+        if loc.get("hidden"):
+            continue
         region = loc["region"]
         spots = by_region.get(region, [])
         model = rm.get(region, default)
