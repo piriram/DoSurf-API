@@ -651,8 +651,18 @@ bash scripts/dive_compare.sh
 포인트라 서핑 해변이 아니고 `locations.json`(32곳)에도 없다.
 
 **해변 쪽과 완전히 분리돼 있다** — 출력이 `data/dive_compare.jsonl` 로 따로 가고
-launchd 에 등록하지 않았다. 운영 수집·`com.dosurf.compare` 에이전트·해변 쪽
-롤업 결론 어디에도 영향을 주지 않는다. 롤업은 `--path` 로 파일을 지정해서 본다.
+launchd 에이전트도 별개다(`com.dosurf.dive-compare`, 매일 **09:40 KST**).
+운영 수집·`com.dosurf.compare`·해변 쪽 롤업 결론 어디에도 영향을 주지 않는다.
+롤업은 `--path` 로 파일을 지정해서 본다.
+
+해변 쪽이 09:30 이라 **10분 뒤로 뺐다** — 둘이 동시에 Windfinder 를 때리지 않게
+하려는 것이고 로그도 갈린다(`data/compare_log/dive-<날짜>.log`).
+
+```sh
+launchctl start com.dosurf.dive-compare    # 즉시 한 번
+launchctl list | grep dosurf               # 등록 확인 (둘 다 보여야 한다)
+launchctl unload ~/Library/LaunchAgents/com.dosurf.dive-compare.plist   # 끄기
+```
 
 좌표는 **OSM 에 `islet` 로 등록된 섬 중심**이다 (Nominatim, 2026-09-30).
 
