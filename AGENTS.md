@@ -103,7 +103,24 @@ python3 -m venv .venv
 이후 모든 실행은 `.venv/bin/python3` 로 한다. `-m scripts.xxx` 형태를 쓰면
 `scripts` 패키지 import가 맞는다.
 
-**자격증명 두 개**는 iCloud 인계 폴더에 있다 (`~/Library/Mobile Documents/com~apple~CloudDocs/DoSurf-API 인계 자료/`).
+**자격증명은 Secret Manager 에서 꺼내는 쪽이 빠르다.** `gcloud` 가 붙어 있는
+맥이면 iCloud 인계 폴더가 필요 없다 — 2026-10-01 에 「인계 폴더가 없어서 막혔다」고
+잘못 판단한 적이 있다.
+
+```sh
+gcloud secrets versions access latest --secret=dosurf-kma-api-key --project dosurf-api
+```
+
+| 시크릿 | 환경변수 |
+|---|---|
+| `dosurf-kma-api-key` | `KMA_API_KEY` |
+| `dosurf-collect-job-token` | `COLLECT_JOB_TOKEN` |
+| `dosurf-telegram-bot-token` | `TELEGRAM_BOT_TOKEN` |
+| `dosurf-monitoring-webhook-user` / `-pass` | `MONITORING_WEBHOOK_*` |
+
+`gcloud` 가 없는 새 맥이라면 iCloud 인계 폴더를 쓴다
+(`~/Library/Mobile Documents/com~apple~CloudDocs/DoSurf-API 인계 자료/`).
+**Firebase 서비스계정 키는 Secret Manager 에 없으므로 그쪽에서만 받는다.**
 
 ```sh
 # Firebase 서비스계정 키 — 이 경로에 두면 firebase_utils 가 자동으로 찾는다
@@ -577,12 +594,34 @@ https://apis.data.go.kr/1360000/OceanInfoService/getWhBuoy
 
 **다이빙 3곳도 안 맞는다.** 위미가 11~18km 인데 격자가 갈린다.
 
-#### 남은 확인 (아직 안 했다)
+#### ⛔ 막힌 곳 — 키가 아니라 **활용신청**이다 (2026-10-01 실측)
 
-1. **`getWhBuoy` 실호출** — 파고·파주기가 실제로 오는지. `KMA_API_KEY` 가
-   필요한데 **이 맥에 없다**(iCloud 인계 폴더 `DoSurf-API 인계 자료` 부재)
-2. 어느 부이가 아직 운영 중인지 (1과 함께)
-3. 관측값의 시간 축이 `ALLOWED_HOURS` 와 맞는지
+**키는 멀쩡하다.** `dosurf-kma-api-key` 로 단기예보를 부르면 `NORMAL_SERVICE`
+가 온다. 같은 키로 부이를 부르면 이것이 온다.
+
+```json
+{"status": 403, "message": "활용신청이 필요한 API 입니다. 활용신청 후 다시 시도해 주십시오."}
+```
+
+**기상청 API허브는 API 마다 따로 신청을 받는다.** 지금 키는 **단기예보만**
+신청돼 있다. `kma_buoy.php` · `sea_obs.php` 둘 다 403 이다.
+
+> **이 저장소의 `KMA_API_KEY` 는 apihub 키다**(22자, `authKey` 파라미터).
+> 공공데이터포털(data.go.kr)의 `serviceKey` 가 아니다 — `getWhBuoy` 에 넣으면
+> `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 가 난다. 둘은 **다른 키 체계**다.
+> 어느 쪽으로 갈지부터 정해야 한다:
+> - **apihub** — 키를 그대로 쓰고 활용신청만 하면 된다. 이쪽이 싸다
+> - **data.go.kr** — `getWhBuoy`. 새 키를 발급받아야 한다
+
+**사람이 해야 하는 일이다.** [기상청 API허브](https://apihub.kma.go.kr/) 에
+로그인해 해양관측(해양기상부이·파고부이) 활용신청을 누르는 것. 무료다.
+
+신청이 되면 이어서 할 것:
+
+1. `kma_buoy.php`(해양기상부이) · 파고부이 엔드포인트 실호출 — 파고·파주기 확인
+2. 어느 부이가 아직 운영 중인지 (**강릉·구엄·신창·죽변이 2025 종료 예정**)
+3. 관측값의 시간 축이 `ALLOWED_HOURS`(0,3,…,21시)와 맞는지
+4. `model_compare.py` 에 기준을 하나 더 다는 형태로 붙인다
 
 ### 해변 좌표가 틀렸는지 — `scripts/validate_locations.py`
 
