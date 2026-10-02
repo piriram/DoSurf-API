@@ -983,8 +983,14 @@ import는 통과하고 API 호출만 실패해 `has_kma=False` 경로로 빠진�
 스키마를 옮길 때는 명시적으로 지워야 한다.
 
 **iOS는 `Codable`이 아니라 딕셔너리 접근으로 읽는다.** 새 필드를 추가해도 앱이 깨지지 않는다.
-단 **파고는 기상청 `wave_height`를 우선**한다 — Open-Meteo 쪽을 고쳐도 화면에 안 나타날 수 있다.
-자세한 건 `docs/ios-migration.md`.
+**단 새 필드는 iOS 가 읽어 주기 전까지 화면에 안 나타난다** — 지금 `wave.peak_period_s`
+가 그 상태다(2026-09-28 배포, iOS 는 아직 `period_s` 를 읽는다). `docs/backlog.md` #17.
+
+> **파고는 이미 Open-Meteo 우선이다** — `FirestoreChartDTO.swift:39`
+> `omWaveHeight ?? waveHeight ?? 0.0`. 2026-10-01 에 `DoSurf-iOS` 를 직접 읽어
+> 확인했다. 여기에 「파고는 기상청을 우선한다」고 적혀 있었는데 **같은 문서
+> 「확인된 사실」 절과 모순이었고 그쪽이 맞다.** 낡은 메모를 근거로 백로그 #14 를
+> P0 로 달아 두고 있었다 — `docs/ios-migration.md` 「P0 · 파고 우선순위」도 같다.
 
 **Open-Meteo 무료 티어는 CC BY 4.0이다.** 비상업 용도이고 출처 표기 의무가 있다.
 한도는 10,000/일 · 5,000/시간 · 600/분. 현재 사용량은 이중 호출 포함 하루 약 512회.

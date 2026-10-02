@@ -39,9 +39,25 @@ let rawWaveHeight = data["wave_height"] as? Double
 
 ---
 
-## P0 · 파고 우선순위를 뒤집어야 한다
+## ~~P0 · 파고 우선순위를 뒤집어야 한다~~ — 해결됨 (2026-10-01 확인)
 
-### 문제
+> ✅ **이미 뒤집혀 있다.** `DoSurf-iOS` 를 받아 읽어 보니 현재 코드는 이렇다.
+>
+> ```swift
+> // FirestoreChartDTO.swift:39
+> waveHeight: omWaveHeight ?? waveHeight ?? 0.0
+> //          ^^^^^^^^^^^^ Open-Meteo 가 먼저다
+> ```
+>
+> 언제 고쳐졌는지는 확인하지 않았다. **아래 분석은 당시 기록으로 남겨 둔다** —
+> 기상청 `WAV` 가 상수라는 것과 두 값의 차이 크기는 지금도 유효하고,
+> **새로 붙는 앱(DoDive 등)에는 계속 경고해야 하는 내용**이다.
+> 운영 605건 재측정(2026-10-01): 두 값 차이 평균 **0.326m** · 최대 **1.340m**.
+>
+> **진짜 남은 P0 은 파주기다** — iOS 가 `period_s`(평균주기)를 읽고
+> `peak_period_s`(첨두주기)를 안 읽는다. `docs/backlog.md` #17.
+
+### 문제 (당시 기록)
 
 ```swift
 // FirestoreChartDTO.swift:38
